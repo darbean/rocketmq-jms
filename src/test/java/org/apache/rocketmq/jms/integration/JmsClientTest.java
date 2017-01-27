@@ -17,66 +17,55 @@
 
 package org.apache.rocketmq.jms.integration;
 
-import java.net.URI;
-import javax.jms.Connection;
-import javax.jms.Destination;
-import javax.jms.Message;
-import javax.jms.MessageConsumer;
-import javax.jms.MessageListener;
-import javax.jms.MessageProducer;
-import javax.jms.Session;
-import javax.jms.TextMessage;
-import org.apache.rocketmq.jms.domain.JmsBaseConnectionFactory;
-import org.apache.rocketmq.jms.integration.IntegrationTestBase;
-import org.junit.Assert;
+import org.apache.rocketmq.jms.RocketMQConnectionFactory;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class JmsClientTest extends IntegrationTestBase {
+import javax.jms.*;
+import java.util.UUID;
+
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.core.IsNull.notNullValue;
+
+public class JmsClientTest {
+
+    private static RocketMQServer server;
+
+    @BeforeClass
+    public static void beforeClass() {
+        server = RocketMQServer.instance();
+        server.start();
+    }
 
     /**
-     * Normal test: send and receive a message
+     * Normal test: send and receive a durable message
      *
      * @throws Exception
      */
     @Test
-    public void onsJmsClientTest() throws Exception {
-        //common
-        JmsBaseConnectionFactory connectionFactory = new JmsBaseConnectionFactory(new
-            URI("rocketmq://xxx?producerId=" + producerId + "&consumerId=" + consumerId + "&nameServer=" + nameServer));
-        Connection connection = connectionFactory.createConnection();
-        Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
-        Destination destination = session.createTopic(topic + ":" + messageType);
+    public void testProduceAndConsume() throws Exception {
+        final String clientId = "coffee";
+        final String rmqTopicName = "coffee-" + UUID.randomUUID().toString();
+        server.createTopic(rmqTopicName);
+        ConnectionFactory factory = new RocketMQConnectionFactory(this.server.getNameServer(), clientId);
+        Connection connection = factory.createConnection();
+        Session session = connection.createSession();
+        connection.start();
+        Topic topic = session.createTopic(rmqTopicName);
 
         try {
             //producer
-            MessageProducer messageProducer = session.createProducer(destination);
-
-            TextMessage message = session.createTextMessage(this.text);
-            messageProducer.send(message);
-            Assert.assertNotNull(message.getJMSMessageID());
+            TextMessage message = session.createTextMessage("mocha coffee,please");
+            MessageProducer producer = session.createProducer(topic);
+            producer.send(message);
 
             //consumer
-            MessageConsumer messageConsumer = session.createConsumer(destination);
-            messageConsumer.setMessageListener(new MessageListener() {
+            MessageConsumer consumer = session.createDurableConsumer(topic, "consumer");
+            Message msg = consumer.receive();
 
-                @Override
-                public void onMessage(Message message) {
-                    try {
-                        Assert.assertNotNull(message);
-                        Assert.assertNotNull(message.getJMSMessageID());
-                    }
-                    catch (Exception e) {
-                        throw new RuntimeException("Handle message error!");
-                    }
-                }
-            });
-            connection.start();
-
-            //wait 5 seconds for message to arrive
-            Thread.sleep(5000);
-        }
-        finally {
-            //Close the connection
+            assertThat(msg, notNullValue());
+        } finally {
+            server.deleteTopic(rmqTopicName);
             connection.close();
         }
 
