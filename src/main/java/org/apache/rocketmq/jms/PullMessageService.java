@@ -21,20 +21,20 @@ import com.alibaba.rocketmq.client.consumer.DefaultMQPullConsumer;
 import com.alibaba.rocketmq.client.consumer.PullResult;
 import com.alibaba.rocketmq.common.message.MessageExt;
 import com.alibaba.rocketmq.common.message.MessageQueue;
-import org.apache.rocketmq.jms.support.JmsHelper;
-import org.apache.rocketmq.jms.support.MessageConverter;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import javax.jms.Destination;
-import javax.jms.JMSException;
-import javax.jms.Message;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import javax.jms.Destination;
+import javax.jms.JMSException;
+import javax.jms.Message;
+import javax.jms.MessageListener;
+import org.apache.rocketmq.jms.support.JmsHelper;
+import org.apache.rocketmq.jms.support.MessageConverter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class PullMessageService extends Thread {
 
@@ -48,9 +48,12 @@ public class PullMessageService extends Thread {
     private String messageSelector;
     /** If durable is true, consume message from the offset consumed last time. Otherwise consume from the max offset */
     private boolean durable;
-    private volatile boolean stopped = false;
+    private volatile boolean shutdown = false;
+    private volatile boolean pause = false;
+    private MessageListener messageListener;
 
-    public PullMessageService(DefaultMQPullConsumer consumer, Destination destination, String messageSelector, boolean durable) {
+    public PullMessageService(DefaultMQPullConsumer consumer, Destination destination, String messageSelector,
+        boolean durable) {
         this.consumer = consumer;
         this.destination = destination;
         this.topicName = JmsHelper.getTopicName(destination);
@@ -59,10 +62,23 @@ public class PullMessageService extends Thread {
         this.setName(PullMessageService.class.getSimpleName() + "-" + COUNTER.incrementAndGet());
     }
 
+    public MessageListener getMessageListener() {
+        return messageListener;
+    }
+
+    public void setMessageListener(MessageListener messageListener) {
+        this.messageListener = messageListener;
+    }
+
     @Override
     public void run() {
-        while (!stopped) {
+        while (!shutdown) {
             try {
+                if (pause) {
+                    sleep(1000);
+                    continue;
+                }
+
                 Set<MessageQueue> mqs = consumer.fetchSubscribeMessageQueues(topicName);
                 for (MessageQueue mq : mqs) {
                     Long offset = durable ? consumer.fetchConsumeOffset(mq, false) : consumer.maxOffset(mq);
@@ -71,7 +87,12 @@ public class PullMessageService extends Thread {
                         case FOUND:
                             List<MessageExt> msgs = pullResult.getMsgFoundList();
                             for (MessageExt msg : msgs) {
-                                msgQueue.put(msg);
+                                if (messageListener == null) {
+                                    msgQueue.put(msg);
+                                }
+                                else {
+                                    messageListener.onMessage(MessageConverter.convert2JMSMessage(msg));
+                                }
                             }
                             consumer.updateConsumeOffset(mq, pullResult.getMaxOffset());
                             break;
@@ -83,7 +104,8 @@ public class PullMessageService extends Thread {
                     }
                 }
                 Thread.sleep(100);
-            } catch (Exception e) {
+            }
+            catch (Exception e) {
                 log.error("Error during pull message.", e);
             }
         }
@@ -93,7 +115,8 @@ public class PullMessageService extends Thread {
         try {
             MessageExt msgExt = this.msgQueue.take();
             return MessageConverter.convert2JMSMessage(msgExt);
-        } catch (InterruptedException e) {
+        }
+        catch (InterruptedException e) {
             throw new JMSException(e.getMessage());
         }
     }
@@ -102,12 +125,21 @@ public class PullMessageService extends Thread {
         try {
             MessageExt msgExt = this.msgQueue.poll(timeout, timeUnit);
             return MessageConverter.convert2JMSMessage(msgExt);
-        } catch (InterruptedException e) {
+        }
+        catch (InterruptedException e) {
             throw new JMSException(e.getMessage());
         }
     }
 
     public void shutdown() {
-        this.stopped = true;
+        this.shutdown = true;
+    }
+
+    public boolean isPause() {
+        return pause;
+    }
+
+    public void setPause(boolean pause) {
+        this.pause = pause;
     }
 }

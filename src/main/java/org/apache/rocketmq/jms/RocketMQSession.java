@@ -18,7 +18,6 @@
 package org.apache.rocketmq.jms;
 
 import java.io.Serializable;
-import java.util.concurrent.locks.ReentrantLock;
 import javax.jms.BytesMessage;
 import javax.jms.Destination;
 import javax.jms.JMSException;
@@ -37,6 +36,8 @@ import javax.jms.TemporaryTopic;
 import javax.jms.TextMessage;
 import javax.jms.Topic;
 import javax.jms.TopicSubscriber;
+import org.apache.rocketmq.jms.ctx.ConnectionContext;
+import org.apache.rocketmq.jms.ctx.SessionContext;
 import org.apache.rocketmq.jms.msg.RocketMQBytesMessage;
 import org.apache.rocketmq.jms.msg.RocketMQObjectMessage;
 import org.apache.rocketmq.jms.msg.RocketMQTextMessage;
@@ -51,14 +52,12 @@ public class RocketMQSession implements Session {
 
     private MessageListener messageListener;
 
-    private MessageProducer producer;
-
-    private ReentrantLock producerLock = new ReentrantLock();
-
     public RocketMQSession(RocketMQConnection connection, int acknowledgeMode, boolean transacted) {
         this.connection = connection;
         this.acknowledgeMode = acknowledgeMode;
         this.transacted = transacted;
+        ConnectionContext.get(connection).addSession(this);
+        SessionContext.register(this);
     }
 
     @Override
@@ -149,43 +148,35 @@ public class RocketMQSession implements Session {
 
     @Override
     public MessageProducer createProducer(Destination destination) throws JMSException {
-        if (this.producer == null) {
-            try {
-                this.producerLock.lock();
-                if (this.producer == null) {
-                    this.producer = new RocketMQProducer(this.connection, destination);
-                }
-            } finally {
-                producerLock.unlock();
-            }
-        }
-        return this.producer;
+        return new RocketMQProducer(connection, destination);
     }
 
     @Override
     public MessageConsumer createConsumer(Destination destination) throws JMSException {
-        return new RocketMQSynConsumer(this.connection, destination, false);
+        return new RocketMQConsumer(this.connection, this, destination, false);
     }
 
     @Override
     public MessageConsumer createConsumer(Destination destination, String messageSelector) throws JMSException {
-        return new RocketMQSynConsumer(this.connection, destination, messageSelector, false);
+        return new RocketMQConsumer(this.connection, this, destination, messageSelector, false);
     }
 
     @Override
-    public MessageConsumer createConsumer(Destination destination, String messageSelector, boolean noLocal) throws JMSException {
+    public MessageConsumer createConsumer(Destination destination, String messageSelector,
+        boolean noLocal) throws JMSException {
         // ignore noLocal param as RMQ not support
-        return new RocketMQSynConsumer(this.connection, destination, messageSelector, false);
+        return new RocketMQConsumer(this.connection, this, destination, messageSelector, false);
     }
 
     @Override
     public MessageConsumer createSharedConsumer(Topic topic, String sharedSubscriptionName) throws JMSException {
-        return new RocketMQSynConsumer(this.connection, topic, null, sharedSubscriptionName, false);
+        return new RocketMQConsumer(this.connection, this, topic, null, sharedSubscriptionName, false);
     }
 
     @Override
-    public MessageConsumer createSharedConsumer(Topic topic, String sharedSubscriptionName, String messageSelector) throws JMSException {
-        return new RocketMQSynConsumer(this.connection, topic, messageSelector, sharedSubscriptionName, false);
+    public MessageConsumer createSharedConsumer(Topic topic, String sharedSubscriptionName,
+        String messageSelector) throws JMSException {
+        return new RocketMQConsumer(this.connection, this, topic, messageSelector, sharedSubscriptionName, false);
     }
 
     @Override
@@ -204,28 +195,31 @@ public class RocketMQSession implements Session {
     }
 
     @Override
-    public TopicSubscriber createDurableSubscriber(Topic topic, String name, String messageSelector, boolean noLocal) throws JMSException {
+    public TopicSubscriber createDurableSubscriber(Topic topic, String name, String messageSelector,
+        boolean noLocal) throws JMSException {
         return new RocketMQTopicSubscriber(this.connection, topic, messageSelector, name, true);
     }
 
     @Override
     public MessageConsumer createDurableConsumer(Topic topic, String name) throws JMSException {
-        return new RocketMQSynConsumer(this.connection, topic, null, name, true);
+        return new RocketMQConsumer(this.connection, this, topic, null, name, true);
     }
 
     @Override
-    public MessageConsumer createDurableConsumer(Topic topic, String name, String messageSelector, boolean noLocal) throws JMSException {
-        return new RocketMQSynConsumer(this.connection, topic, messageSelector, name, true);
+    public MessageConsumer createDurableConsumer(Topic topic, String name, String messageSelector,
+        boolean noLocal) throws JMSException {
+        return new RocketMQConsumer(this.connection, this, topic, messageSelector, name, true);
     }
 
     @Override
     public MessageConsumer createSharedDurableConsumer(Topic topic, String name) throws JMSException {
-        return new RocketMQSynConsumer(this.connection, topic, null, name, true);
+        return new RocketMQConsumer(this.connection, this, topic, null, name, true);
     }
 
     @Override
-    public MessageConsumer createSharedDurableConsumer(Topic topic, String name, String messageSelector) throws JMSException {
-        return new RocketMQSynConsumer(this.connection, topic, messageSelector, name, true);
+    public MessageConsumer createSharedDurableConsumer(Topic topic, String name,
+        String messageSelector) throws JMSException {
+        return new RocketMQConsumer(this.connection, this, topic, messageSelector, name, true);
     }
 
     @Override

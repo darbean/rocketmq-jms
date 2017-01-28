@@ -31,6 +31,7 @@ import javax.jms.JMSException;
 import javax.jms.JMSRuntimeException;
 import javax.jms.Message;
 import javax.jms.MessageProducer;
+import org.apache.rocketmq.jms.ctx.ConnectionContext;
 import org.apache.rocketmq.jms.support.JmsHelper;
 import org.apache.rocketmq.jms.support.MessageConverter;
 import org.slf4j.Logger;
@@ -60,14 +61,16 @@ public class RocketMQProducer implements MessageProducer {
         this.connection = connection;
         this.destination = destination;
 
-        this.clientConfig = ConnectionEnvironment.get().getConnectionClientConfig(connection);
+        this.clientConfig = ConnectionContext.get(connection).getClientConfig();
+        ConnectionContext.get(connection).addProducer(this);
 
         this.mqProducer = new DefaultMQProducer(UUID.randomUUID().toString());
         this.mqProducer.setNamesrvAddr(clientConfig.getNamesrvAddr());
         this.mqProducer.setInstanceName(clientConfig.getInstanceName());
         try {
             this.mqProducer.start();
-        } catch (MQClientException e) {
+        }
+        catch (MQClientException e) {
             throw new JMSRuntimeException(format("Fail to start producer, error msg:%s", getStackTrace(e)));
         }
     }
@@ -166,7 +169,8 @@ public class RocketMQProducer implements MessageProducer {
     }
 
     @Override
-    public void send(Destination destination, Message message, int deliveryMode, int priority, long timeToLive) throws JMSException {
+    public void send(Destination destination, Message message, int deliveryMode, int priority,
+        long timeToLive) throws JMSException {
         String topicName = JmsHelper.getTopicName(destination);
 
         com.alibaba.rocketmq.common.message.Message rmqMsg = createRmqMessage(message, topicName);
@@ -179,27 +183,32 @@ public class RocketMQProducer implements MessageProducer {
 
         try {
             sendResult = mqProducer.send(rmqMsg);
-        } catch (Exception e) {
+        }
+        catch (Exception e) {
             throw new JMSException(format("Fail to send message. Error: %s", getStackTrace(e)));
         }
 
         if (sendResult != null && sendResult.getSendStatus() == SendStatus.SEND_OK) {
             log.info("Success to send message[key={}]", rmqMsg.getKeys());
             return;
-        } else {
+        }
+        else {
             throw new JMSException(format("Sending message error with result status:%s", sendResult.getSendStatus().name()));
         }
     }
 
-    private void sendAsync(com.alibaba.rocketmq.common.message.Message rmqMsg, CompletionListener completionListener) throws JMSException {
+    private void sendAsync(com.alibaba.rocketmq.common.message.Message rmqMsg,
+        CompletionListener completionListener) throws JMSException {
         try {
             mqProducer.send(rmqMsg, new SendCompletionListener(completionListener));
-        } catch (Exception e) {
+        }
+        catch (Exception e) {
             throw new JMSException(format("Fail to send message. Error: %s", getStackTrace(e)));
         }
     }
 
-    private com.alibaba.rocketmq.common.message.Message createRmqMessage(Message message, String topicName) throws JMSException {
+    private com.alibaba.rocketmq.common.message.Message createRmqMessage(Message message,
+        String topicName) throws JMSException {
         byte[] content = MessageConverter.getContentFromJms(message);
         com.alibaba.rocketmq.common.message.Message rmqMsg = new com.alibaba.rocketmq.common.message.Message(topicName, content);
         rmqMsg.setKeys(System.currentTimeMillis() + "" + counter.incrementAndGet());
@@ -212,21 +221,25 @@ public class RocketMQProducer implements MessageProducer {
     }
 
     @Override
-    public void send(Message message, int deliveryMode, int priority, long timeToLive, CompletionListener completionListener) throws JMSException {
+    public void send(Message message, int deliveryMode, int priority, long timeToLive,
+        CompletionListener completionListener) throws JMSException {
         this.send(this.destination, message, DEFAULT_DELIVERY_MODE, DEFAULT_PRIORITY, DEFAULT_TIME_TO_LIVE, completionListener);
     }
 
     @Override
-    public void send(Destination destination, Message message, CompletionListener completionListener) throws JMSException {
+    public void send(Destination destination, Message message,
+        CompletionListener completionListener) throws JMSException {
         this.send(destination, message, DEFAULT_DELIVERY_MODE, DEFAULT_PRIORITY, DEFAULT_TIME_TO_LIVE, completionListener);
     }
 
     @Override
-    public void send(Destination destination, Message message, int deliveryMode, int priority, long timeToLive, CompletionListener completionListener) throws JMSException {
+    public void send(Destination destination, Message message, int deliveryMode, int priority, long timeToLive,
+        CompletionListener completionListener) throws JMSException {
         String topicName = JmsHelper.getTopicName(destination);
 
         com.alibaba.rocketmq.common.message.Message rmqMsg = createRmqMessage(message, topicName);
 
         sendAsync(rmqMsg, completionListener);
     }
+
 }

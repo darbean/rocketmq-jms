@@ -17,25 +17,22 @@
 
 package org.apache.rocketmq.jms.integration;
 
-import org.apache.rocketmq.jms.RocketMQConnectionFactory;
-import org.junit.BeforeClass;
-import org.junit.Test;
-
-import javax.jms.*;
 import java.util.UUID;
+import javax.jms.Connection;
+import javax.jms.ConnectionFactory;
+import javax.jms.Message;
+import javax.jms.MessageConsumer;
+import javax.jms.MessageProducer;
+import javax.jms.Session;
+import javax.jms.TextMessage;
+import javax.jms.Topic;
+import org.apache.rocketmq.jms.RocketMQConnectionFactory;
+import org.junit.Test;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.IsNull.notNullValue;
 
-public class JmsClientTest {
-
-    private static RocketMQServer server;
-
-    @BeforeClass
-    public static void beforeClass() {
-        server = RocketMQServer.instance();
-        server.start();
-    }
+public class JmsClientTest extends IntegrationBaseTest {
 
     /**
      * Normal test: send and receive a durable message
@@ -44,10 +41,10 @@ public class JmsClientTest {
      */
     @Test
     public void testProduceAndConsume() throws Exception {
-        final String clientId = "coffee";
         final String rmqTopicName = "coffee-" + UUID.randomUUID().toString();
         server.createTopic(rmqTopicName);
-        ConnectionFactory factory = new RocketMQConnectionFactory(this.server.getNameServer(), clientId);
+
+        ConnectionFactory factory = new RocketMQConnectionFactory(server.getNameServer(), clientId);
         Connection connection = factory.createConnection();
         Session session = connection.createSession();
         connection.start();
@@ -64,12 +61,12 @@ public class JmsClientTest {
             Message msg = consumer.receive();
 
             assertThat(msg, notNullValue());
-        } finally {
+        }
+        finally {
             server.deleteTopic(rmqTopicName);
             connection.close();
         }
 
     }
-
 
 }

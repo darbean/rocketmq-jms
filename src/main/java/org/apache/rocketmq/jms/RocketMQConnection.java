@@ -19,23 +19,25 @@ package org.apache.rocketmq.jms;
 
 import com.alibaba.rocketmq.client.exception.MQClientException;
 import com.alibaba.rocketmq.client.impl.factory.MQClientInstance;
-import java.util.concurrent.atomic.AtomicBoolean;
 import javax.jms.Connection;
 import javax.jms.ConnectionConsumer;
 import javax.jms.ConnectionMetaData;
 import javax.jms.Destination;
 import javax.jms.ExceptionListener;
 import javax.jms.JMSException;
+import javax.jms.JMSRuntimeException;
 import javax.jms.ServerSessionPool;
 import javax.jms.Session;
 import javax.jms.Topic;
-import org.apache.commons.lang.exception.ExceptionUtils;
+import org.apache.rocketmq.jms.ctx.ConnectionContext;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static java.lang.String.format;
 import static javax.jms.Session.SESSION_TRANSACTED;
+import static org.apache.commons.lang.exception.ExceptionUtils.getStackTrace;
+import static org.apache.rocketmq.jms.support.ErrorCodes.CONNECTION_START_FAILED;
 
 public class RocketMQConnection implements Connection {
-    private final AtomicBoolean started = new AtomicBoolean(false);
     protected String clientID;
     protected ExceptionListener exceptionListener;
 
@@ -43,13 +45,20 @@ public class RocketMQConnection implements Connection {
 
     public RocketMQConnection(MQClientInstance clientInstance) {
         this.clientInstance = clientInstance;
+        try {
+            this.clientInstance.start();
+        }
+        catch (MQClientException e) {
+            throw new JMSRuntimeException(format("Fail to start connection:%s", getStackTrace(e)), CONNECTION_START_FAILED);
+        }
     }
 
     @Override
     public Session createSession(int sessionMode) throws JMSException {
         if (sessionMode == SESSION_TRANSACTED) {
             return createSession(true, Session.AUTO_ACKNOWLEDGE);
-        } else {
+        }
+        else {
             return createSession(false, sessionMode);
         }
     }
@@ -63,7 +72,8 @@ public class RocketMQConnection implements Connection {
     public Session createSession(boolean transacted, int acknowledgeMode) throws JMSException {
         checkArgs(transacted, acknowledgeMode);
 
-        return new RocketMQSession(this, acknowledgeMode, transacted);
+        Session session = new RocketMQSession(this, acknowledgeMode, transacted);
+        return session;
     }
 
     private void checkArgs(boolean transacted, int acknowledgeMode) {
@@ -72,32 +82,34 @@ public class RocketMQConnection implements Connection {
 
         //todo: support other acknowledgeMode
         checkArgument(Session.DUPS_OK_ACKNOWLEDGE == acknowledgeMode,
-                "Only support DUPS_OK_ACKNOWLEDGE now");
+            "Only support DUPS_OK_ACKNOWLEDGE now");
     }
 
     @Override
     public ConnectionConsumer createConnectionConsumer(Destination destination,
-                                                       String messageSelector,
-                                                       ServerSessionPool sessionPool,
-                                                       int maxMessages) throws JMSException {
+        String messageSelector,
+        ServerSessionPool sessionPool,
+        int maxMessages) throws JMSException {
         throw new UnsupportedOperationException();
     }
 
     @Override
     public ConnectionConsumer createDurableConnectionConsumer(Topic topic, String subscriptionName,
-                                                              String messageSelector,
-                                                              ServerSessionPool sessionPool,
-                                                              int maxMessages) throws JMSException {
+        String messageSelector,
+        ServerSessionPool sessionPool,
+        int maxMessages) throws JMSException {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public ConnectionConsumer createSharedConnectionConsumer(Topic topic, String subscriptionName, String messageSelector, ServerSessionPool sessionPool, int maxMessages) throws JMSException {
+    public ConnectionConsumer createSharedConnectionConsumer(Topic topic, String subscriptionName,
+        String messageSelector, ServerSessionPool sessionPool, int maxMessages) throws JMSException {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public ConnectionConsumer createSharedDurableConnectionConsumer(Topic topic, String subscriptionName, String messageSelector, ServerSessionPool sessionPool, int maxMessages) throws JMSException {
+    public ConnectionConsumer createSharedDurableConnectionConsumer(Topic topic, String subscriptionName,
+        String messageSelector, ServerSessionPool sessionPool, int maxMessages) throws JMSException {
         throw new UnsupportedOperationException();
     }
 
@@ -128,39 +140,26 @@ public class RocketMQConnection implements Connection {
 
     @Override
     public void start() throws JMSException {
-        if (started.compareAndSet(false, true)) {
-            try {
-                this.clientInstance.start();
-            } catch (MQClientException e) {
-                throw new JMSException(String.format("Fail to start connection:%s",
-                        ExceptionUtils.getStackTrace(e)), ErrorCodes.CONNECTION_START_FAILED
-                );
-            }
+        ConnectionContext context = ConnectionContext.get(this);
+
+        for (RocketMQConsumer consumer : context.getConsumers()) {
+            consumer.setPause(false);
         }
     }
 
     @Override
     public void stop() throws JMSException {
-        //todo: Add constrain that must stop before adding new consumer
+        ConnectionContext context = ConnectionContext.get(this);
+
+        for (RocketMQConsumer consumer : context.getConsumers()) {
+            consumer.setPause(true);
+        }
+
     }
 
     @Override
     public void close() throws JMSException {
-        if (started.compareAndSet(true, false)) {
-            this.clientInstance.shutdown();
-        }
+        this.clientInstance.shutdown();
     }
 
-    /**
-     * Whether the connection is started.
-     *
-     * @return whether the connection is started.
-     */
-    public boolean isStarted() {
-        return started.get();
-    }
-
-    public MQClientInstance getClientInstance() {
-        return clientInstance;
-    }
 }

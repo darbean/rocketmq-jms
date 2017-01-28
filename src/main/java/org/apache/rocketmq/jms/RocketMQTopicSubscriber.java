@@ -22,7 +22,7 @@ import javax.jms.JMSException;
 import javax.jms.Topic;
 import javax.jms.TopicSubscriber;
 
-public class RocketMQTopicSubscriber extends RocketMQSynConsumer implements TopicSubscriber {
+public class RocketMQTopicSubscriber extends RocketMQConsumer implements TopicSubscriber {
 
     private Topic topic;
 

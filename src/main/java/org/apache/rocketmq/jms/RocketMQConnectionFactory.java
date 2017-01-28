@@ -20,14 +20,14 @@ package org.apache.rocketmq.jms;
 import com.alibaba.rocketmq.client.ClientConfig;
 import com.alibaba.rocketmq.client.impl.MQClientManager;
 import com.alibaba.rocketmq.client.impl.factory.MQClientInstance;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import java.util.UUID;
 import javax.jms.Connection;
 import javax.jms.ConnectionFactory;
 import javax.jms.JMSContext;
 import javax.jms.JMSException;
-import java.util.UUID;
+import org.apache.rocketmq.jms.ctx.ConnectionContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class RocketMQConnectionFactory implements ConnectionFactory {
 
@@ -74,8 +74,8 @@ public class RocketMQConnectionFactory implements ConnectionFactory {
         RocketMQConnection connection = new RocketMQConnection(mqClientInstance);
         connection.setClientID(clientId);
 
-        ConnectionEnvironment environment = ConnectionEnvironment.get();
-        environment.putConnectionClientConfig(connection, clientConfig);
+        ConnectionContext context = ConnectionContext.register(connection);
+        context.setClientConfig(clientConfig);
 
         return connection;
     }
