@@ -17,6 +17,7 @@
 
 package org.apache.rocketmq.jms.support;
 
+import java.util.UUID;
 import javax.jms.Destination;
 import javax.jms.JMSException;
 import javax.jms.JMSRuntimeException;
@@ -33,13 +34,16 @@ public class JmsHelper {
             String topicName;
             if (destination instanceof Topic) {
                 topicName = ((Topic) destination).getTopicName();
-            } else if (destination instanceof Queue) {
+            }
+            else if (destination instanceof Queue) {
                 topicName = ((Queue) destination).getQueueName();
-            } else {
+            }
+            else {
                 throw new JMSException(String.format("Unsupported Destination type:", destination.getClass()));
             }
             return topicName;
-        } catch (JMSException e) {
+        }
+        catch (JMSException e) {
             throw new JMSRuntimeException(e.getMessage());
         }
     }
@@ -49,5 +53,9 @@ public class JmsHelper {
             throw new UnsupportedOperationException("Operation unsupported! If you want to skip this Exception," +
                 " use '-Dskip.set.exception=true' in JVM options.");
         }
+    }
+
+    public static String uuid() {
+        return UUID.randomUUID().toString();
     }
 }

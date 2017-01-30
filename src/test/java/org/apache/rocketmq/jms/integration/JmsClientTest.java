@@ -58,13 +58,17 @@ public class JmsClientTest extends IntegrationBaseTest {
 
             //consumer
             MessageConsumer consumer = session.createDurableConsumer(topic, "consumer");
+
+            connection.start();
+
             Message msg = consumer.receive();
 
             assertThat(msg, notNullValue());
+
+            connection.close();
         }
         finally {
             server.deleteTopic(rmqTopicName);
-            connection.close();
         }
 
     }

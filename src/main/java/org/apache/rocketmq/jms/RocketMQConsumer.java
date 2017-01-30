@@ -17,73 +17,47 @@
 
 package org.apache.rocketmq.jms;
 
-import com.alibaba.rocketmq.client.ClientConfig;
-import com.alibaba.rocketmq.client.consumer.DefaultMQPullConsumer;
-import com.alibaba.rocketmq.client.exception.MQClientException;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
-import javax.jms.Connection;
 import javax.jms.Destination;
 import javax.jms.JMSException;
-import javax.jms.JMSRuntimeException;
 import javax.jms.Message;
 import javax.jms.MessageConsumer;
 import javax.jms.MessageListener;
-import javax.jms.Session;
-import org.apache.commons.lang.exception.ExceptionUtils;
-import org.apache.rocketmq.jms.ctx.ConnectionContext;
-import org.apache.rocketmq.jms.ctx.SessionContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class RocketMQConsumer implements MessageConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(RocketMQConsumer.class);
-    private Connection connection;
-    private Session session;
-    private DefaultMQPullConsumer consumer;
-    private ClientConfig clientConfig;
+    private RocketMQSession session;
     private Destination destination;
     private String messageSelector;
     private MessageListener messageListener;
+    private String sharedSubscriptionName;
     private boolean durable;
 
-    protected PullMessageService pullMessageService;
-    private ExecutorService asyncMsgExecutor;
+    private MessageDeliveryService messageDeliveryService;
 
-    public RocketMQConsumer(Connection connection, Session session, Destination destination, boolean durable) {
-        this(connection, session, destination, null, durable);
-    }
-
-    public RocketMQConsumer(Connection connection, Session session, Destination destination, String messageSelector,
+    public RocketMQConsumer(RocketMQSession session, Destination destination,
+        String messageSelector,
         boolean durable) {
-        // default is unshared consume
-        this(connection, session, destination, messageSelector, UUID.randomUUID().toString(), durable);
+        this(session, destination, messageSelector, UUID.randomUUID().toString(), durable);
     }
 
-    public RocketMQConsumer(Connection connection, Session session, Destination destination, String messageSelector,
+    public RocketMQConsumer(RocketMQSession session, Destination destination,
+        String messageSelector,
         String sharedSubscriptionName, boolean durable) {
-        this.connection = connection;
         this.session = session;
         this.destination = destination;
-        this.clientConfig = ConnectionContext.get(connection).getClientConfig();
-        this.messageSelector = messageSelector == null ? "*" : messageSelector;
+        this.messageSelector = messageSelector;
+        this.sharedSubscriptionName = sharedSubscriptionName;
         this.durable = durable;
 
-        ConnectionContext.get(connection).addConsumer(this);
-
-        this.consumer = new DefaultMQPullConsumer(sharedSubscriptionName);
-        this.consumer.setNamesrvAddr(this.clientConfig.getNamesrvAddr());
-        this.consumer.setInstanceName(this.clientConfig.getInstanceName());
-        try {
-            this.consumer.start();
-        }
-        catch (MQClientException e) {
-            throw new JMSRuntimeException("Fail to start syn consumer, error msg:%s", ExceptionUtils.getStackTrace(e));
-        }
-
-        this.pullMessageService = new PullMessageService(this.consumer, destination, messageSelector, durable);
+        this.messageDeliveryService = new MessageDeliveryService(this, this.destination, this.sharedSubscriptionName);
+        this.messageDeliveryService.setMessageSelector(this.messageSelector);
+        this.messageDeliveryService.setDurable(this.durable);
+        this.messageDeliveryService.start();
     }
 
     @Override
@@ -98,34 +72,34 @@ public class RocketMQConsumer implements MessageConsumer {
 
     @Override
     public void setMessageListener(MessageListener listener) throws JMSException {
-        if (SessionContext.get(this.session).isSyncModel()) {
+        if (this.session.isSyncModel()) {
             throw new JMSException("A asynchronously call is not permitted when a session is being used synchronously");
         }
 
         this.messageListener = listener;
-
-        this.pullMessageService.setMessageListener(listener);
-        this.pullMessageService.start();
-
-        SessionContext.get(this.session).addAsyncConsumer(this);
+        this.messageDeliveryService.setMessageListener(listener);
+        this.session.addAsyncConsumer(this);
     }
 
     @Override
     public Message receive() throws JMSException {
-        return this.receive(Long.MAX_VALUE);
+        return this.receive(0);
     }
 
     @Override
     public Message receive(long timeout) throws JMSException {
-        if (SessionContext.get(this.session).isAsyncModel()) {
+        if (this.session.isAsyncModel()) {
             throw new JMSException("A synchronous call is not permitted when a session is being used asynchronously.");
         }
 
-        this.pullMessageService.start();
+        this.session.addSyncConsumer(this);
 
-        SessionContext.get(this.session).addSyncConsumer(this);
-
-        return this.pullMessageService.poll(timeout, TimeUnit.MILLISECONDS);
+        if (timeout == 0) {
+            return this.messageDeliveryService.poll();
+        }
+        else {
+            return this.messageDeliveryService.poll(timeout, TimeUnit.MILLISECONDS);
+        }
     }
 
     @Override
@@ -135,12 +109,26 @@ public class RocketMQConsumer implements MessageConsumer {
 
     @Override
     public void close() throws JMSException {
-        this.pullMessageService.shutdown();
-        this.consumer.shutdown();
+        log.info("Begin to close consumer:{}", toString());
+
+        this.messageDeliveryService.close();
+
+        log.info("Success to close consumer:{}", toString());
     }
 
-    public void setPause(boolean pause) {
-        this.pullMessageService.setPause(pause);
+    public void start() {
+        this.messageDeliveryService.recover();
     }
 
+    public void stop() {
+        this.messageDeliveryService.pause();
+    }
+
+    public MessageDeliveryService getMessageDeliveryService() {
+        return messageDeliveryService;
+    }
+
+    public RocketMQSession getSession() {
+        return session;
+    }
 }

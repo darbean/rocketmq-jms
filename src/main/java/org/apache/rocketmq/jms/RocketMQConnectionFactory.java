@@ -17,32 +17,45 @@
 
 package org.apache.rocketmq.jms;
 
-import com.alibaba.rocketmq.client.ClientConfig;
-import com.alibaba.rocketmq.client.impl.MQClientManager;
 import com.alibaba.rocketmq.client.impl.factory.MQClientInstance;
-import java.util.UUID;
 import javax.jms.Connection;
 import javax.jms.ConnectionFactory;
 import javax.jms.JMSContext;
 import javax.jms.JMSException;
-import org.apache.rocketmq.jms.ctx.ConnectionContext;
+import org.apache.rocketmq.jms.support.JmsHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * Implement of {@link ConnectionFactory} using RocketMQ client.
+ *
+ * <P>In RocketMQ, all producers and consumers interactive with broker
+ * by an {@link MQClientInstance} object, which encapsulates tcp connection,
+ * schedule task and so on. The best way to control the behavior of producers/consumers
+ * derived from a connection is to manipulate the {@link MQClientInstance} directly.
+ *
+ * <P>However, this object is not easy to access as it is maintained within RocketMQ Client.
+ * Fortunately another equivalent identifier called "instanceName" is provided.
+ * The "instanceName" is a one-to-one conception with {@link MQClientInstance} object.
+ * Just like there is a hash map,"instanceName" is the key and a {@link MQClientInstance}
+ * object is the value. So the essential keyword passed through all objects created by a
+ * connection is "instanceName".
+ */
 public class RocketMQConnectionFactory implements ConnectionFactory {
 
-    private static Logger logger = LoggerFactory.getLogger(RocketMQConnectionFactory.class);
+    private static final Logger log = LoggerFactory.getLogger(RocketMQConnectionFactory.class);
 
-    private String namesrvAddr;
+    private String nameServerAddress;
 
     private String clientId;
 
-    public RocketMQConnectionFactory(String namesrvAddr) {
-        this.namesrvAddr = namesrvAddr;
+    public RocketMQConnectionFactory(String nameServerAddress) {
+        this.nameServerAddress = nameServerAddress;
+        this.clientId = JmsHelper.uuid();
     }
 
-    public RocketMQConnectionFactory(String namesrvAddr, String clientId) {
-        this.namesrvAddr = namesrvAddr;
+    public RocketMQConnectionFactory(String nameServerAddress, String clientId) {
+        this.nameServerAddress = nameServerAddress;
         this.clientId = clientId;
     }
 
@@ -52,7 +65,7 @@ public class RocketMQConnectionFactory implements ConnectionFactory {
     }
 
     /**
-     * Using userName and Password to create a connection. Now access RMQ broker
+     * Using userName and Password to register a connection. Now access RMQ broker
      * is anonymous and any userName/password is legal.
      *
      * @param userName ignored
@@ -66,17 +79,10 @@ public class RocketMQConnectionFactory implements ConnectionFactory {
     }
 
     private Connection createRocketMQConnection(String userName, String password) throws JMSException {
-        ClientConfig clientConfig = new ClientConfig();
-        clientConfig.setNamesrvAddr(namesrvAddr);
-        clientConfig.setInstanceName(UUID.randomUUID().toString());
+        final String instanceName = JmsHelper.uuid();
+        RocketMQConnection connection = new RocketMQConnection(this.nameServerAddress, this.clientId, instanceName);
 
-        MQClientInstance mqClientInstance = MQClientManager.getInstance().getAndCreateMQClientInstance(clientConfig);
-        RocketMQConnection connection = new RocketMQConnection(mqClientInstance);
-        connection.setClientID(clientId);
-
-        ConnectionContext context = ConnectionContext.register(connection);
-        context.setClientConfig(clientConfig);
-
+        log.info("Success to create a connection[clientIdentifier:{},userName:{}", instanceName, clientId, userName);
         return connection;
     }
 
@@ -112,11 +118,11 @@ public class RocketMQConnectionFactory implements ConnectionFactory {
         this.clientId = clientId;
     }
 
-    public String getNamesrvAddr() {
-        return namesrvAddr;
+    public String getNameServerAddress() {
+        return nameServerAddress;
     }
 
-    public void setNamesrvAddr(String namesrvAddr) {
-        this.namesrvAddr = namesrvAddr;
+    public void setNameServerAddress(String nameServerAddress) {
+        this.nameServerAddress = nameServerAddress;
     }
 }

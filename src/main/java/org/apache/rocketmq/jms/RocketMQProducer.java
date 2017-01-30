@@ -25,13 +25,11 @@ import com.alibaba.rocketmq.client.producer.SendStatus;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.jms.CompletionListener;
-import javax.jms.Connection;
 import javax.jms.Destination;
 import javax.jms.JMSException;
 import javax.jms.JMSRuntimeException;
 import javax.jms.Message;
 import javax.jms.MessageProducer;
-import org.apache.rocketmq.jms.ctx.ConnectionContext;
 import org.apache.rocketmq.jms.support.JmsHelper;
 import org.apache.rocketmq.jms.support.MessageConverter;
 import org.slf4j.Logger;
@@ -47,24 +45,20 @@ public class RocketMQProducer implements MessageProducer {
 
     private static final Logger log = LoggerFactory.getLogger(RocketMQProducer.class);
 
-    private final Connection connection;
+    private RocketMQSession session;
 
     private final DefaultMQProducer mqProducer;
-
-    private final ClientConfig clientConfig;
 
     private Destination destination;
 
     private AtomicLong counter = new AtomicLong(1L);
 
-    public RocketMQProducer(Connection connection, Destination destination) {
-        this.connection = connection;
+    public RocketMQProducer(RocketMQSession session, Destination destination) {
+        this.session = session;
         this.destination = destination;
 
-        this.clientConfig = ConnectionContext.get(connection).getClientConfig();
-        ConnectionContext.get(connection).addProducer(this);
-
         this.mqProducer = new DefaultMQProducer(UUID.randomUUID().toString());
+        ClientConfig clientConfig = this.session.getConnection().getClientConfig();
         this.mqProducer.setNamesrvAddr(clientConfig.getNamesrvAddr());
         this.mqProducer.setInstanceName(clientConfig.getInstanceName());
         try {
@@ -149,7 +143,11 @@ public class RocketMQProducer implements MessageProducer {
 
     @Override
     public void close() throws JMSException {
+        log.info("Begin to close producer:{}", toString());
+
         this.mqProducer.shutdown();
+
+        log.info("Success to close producer:{}", toString());
     }
 
     @Override

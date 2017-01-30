@@ -17,7 +17,6 @@
 
 package org.apache.rocketmq.jms;
 
-import javax.jms.Connection;
 import javax.jms.JMSException;
 import javax.jms.Topic;
 import javax.jms.TopicSubscriber;
@@ -26,8 +25,9 @@ public class RocketMQTopicSubscriber extends RocketMQConsumer implements TopicSu
 
     private Topic topic;
 
-    public RocketMQTopicSubscriber(Connection connection, Topic topic, String messageSelector, String sharedSubscriptionName, boolean durable) {
-        super(connection, topic, messageSelector, sharedSubscriptionName, durable);
+    public RocketMQTopicSubscriber(RocketMQSession session, Topic topic, String messageSelector,
+        String sharedSubscriptionName, boolean durable) {
+        super(session, topic, messageSelector, sharedSubscriptionName, durable);
         this.topic = topic;
     }
 

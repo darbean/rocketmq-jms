@@ -29,14 +29,13 @@ import com.alibaba.rocketmq.remoting.netty.NettyServerConfig;
 import com.alibaba.rocketmq.store.config.MessageStoreConfig;
 import com.alibaba.rocketmq.tools.admin.DefaultMQAdminExt;
 import com.google.common.collect.Sets;
-import org.junit.Assert;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Random;
+import org.junit.Assert;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static java.io.File.separator;
 import static java.lang.String.format;
@@ -70,7 +69,7 @@ public class RocketMQServer {
     private DefaultMQAdminExt defaultMQAdminExt = new DefaultMQAdminExt();
 
     private RocketMQServer() {
-
+        this.storeConfig.setDiskMaxUsedSpaceRatio(95);
     }
 
     public static RocketMQServer instance() {
@@ -103,7 +102,7 @@ public class RocketMQServer {
                 return;
             }
         }
-        System.out.println("Has retry 5 times to create base dir,but still failed.");
+        System.out.println("Has retry 5 times to register base dir,but still failed.");
         System.exit(1);
     }
 
@@ -115,7 +114,8 @@ public class RocketMQServer {
             Assert.assertTrue(namesrvController.initialize());
             logger.info("Name Server Start:{}", nameServerNettyServerConfig.getListenPort());
             namesrvController.start();
-        } catch (Exception e) {
+        }
+        catch (Exception e) {
             System.out.println(format("Name Server start failed, stack trace:%s", getStackTrace(e)));
             System.exit(1);
         }
@@ -138,7 +138,8 @@ public class RocketMQServer {
             logger.info("Broker Start name:{} addr:{}", brokerConfig.getBrokerName(), brokerController.getBrokerAddr());
             brokerController.start();
 
-        } catch (Exception e) {
+        }
+        catch (Exception e) {
             System.out.println(format("Broker start failed, stack trace:%s", getStackTrace(e)));
             System.exit(1);
         }
@@ -147,7 +148,8 @@ public class RocketMQServer {
     private void startMQAdmin() {
         try {
             defaultMQAdminExt.start();
-        } catch (MQClientException e) {
+        }
+        catch (MQClientException e) {
             System.out.println(format("MQAdmin start failed, stack trace:%s", getStackTrace(e)));
             System.exit(1);
         }
@@ -171,7 +173,8 @@ public class RocketMQServer {
         }
         if (file.isFile()) {
             file.delete();
-        } else if (file.isDirectory()) {
+        }
+        else if (file.isDirectory()) {
             File[] files = file.listFiles();
             for (int i = 0; i < files.length; i++) {
                 deleteFile(files[i]);
@@ -187,7 +190,8 @@ public class RocketMQServer {
         topicConfig.setWriteQueueNums(4);
         try {
             defaultMQAdminExt.createAndUpdateTopicConfig(this.brokerController.getBrokerAddr(), topicConfig);
-        } catch (Exception e) {
+        }
+        catch (Exception e) {
             logger.error("Create topic:{}, addr:{} failed", topic, this.brokerController.getBrokerAddr());
         }
     }
@@ -195,7 +199,8 @@ public class RocketMQServer {
     public void deleteTopic(String topic) {
         try {
             defaultMQAdminExt.deleteTopicInBroker(Sets.newHashSet(this.brokerController.getBrokerAddr()), topic);
-        } catch (Exception e) {
+        }
+        catch (Exception e) {
             logger.error("Delete topic:{}, addr:{} failed", topic, this.brokerController.getBrokerAddr());
         }
     }

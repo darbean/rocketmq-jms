@@ -17,40 +17,68 @@
 
 package org.apache.rocketmq.jms;
 
+import com.alibaba.rocketmq.client.ClientConfig;
 import com.alibaba.rocketmq.client.exception.MQClientException;
+import com.alibaba.rocketmq.client.impl.MQClientManager;
 import com.alibaba.rocketmq.client.impl.factory.MQClientInstance;
+import java.util.ArrayList;
+import java.util.List;
 import javax.jms.Connection;
 import javax.jms.ConnectionConsumer;
 import javax.jms.ConnectionMetaData;
 import javax.jms.Destination;
 import javax.jms.ExceptionListener;
+import javax.jms.IllegalStateException;
 import javax.jms.JMSException;
 import javax.jms.JMSRuntimeException;
 import javax.jms.ServerSessionPool;
 import javax.jms.Session;
 import javax.jms.Topic;
-import org.apache.rocketmq.jms.ctx.ConnectionContext;
+import org.apache.commons.lang.builder.ToStringBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static java.lang.String.format;
+import static javax.jms.Session.DUPS_OK_ACKNOWLEDGE;
 import static javax.jms.Session.SESSION_TRANSACTED;
+import static org.apache.commons.lang.StringUtils.isNotBlank;
 import static org.apache.commons.lang.exception.ExceptionUtils.getStackTrace;
-import static org.apache.rocketmq.jms.support.ErrorCodes.CONNECTION_START_FAILED;
 
 public class RocketMQConnection implements Connection {
-    protected String clientID;
-    protected ExceptionListener exceptionListener;
 
+    private static final Logger log = LoggerFactory.getLogger(RocketMQConnection.class);
+
+    private String clientID;
+    private ClientConfig clientConfig;
     private MQClientInstance clientInstance;
 
-    public RocketMQConnection(MQClientInstance clientInstance) {
-        this.clientInstance = clientInstance;
+    private List<RocketMQSession> sessionList = new ArrayList();
+
+    protected RocketMQConnection(String nameServerAddress, String clientID, String instanceName) {
+        this.clientID = clientID;
+
+        this.clientConfig = new ClientConfig();
+        this.clientConfig.setNamesrvAddr(nameServerAddress);
+        this.clientConfig.setInstanceName(instanceName);
+
+        startClientInstance();
+    }
+
+    private void startClientInstance() {
         try {
-            this.clientInstance.start();
+            // create a tcp connection to broker and some other background thread
+            this.clientInstance = MQClientManager.getInstance().getAndCreateMQClientInstance(this.clientConfig);
+            clientInstance.start();
         }
         catch (MQClientException e) {
-            throw new JMSRuntimeException(format("Fail to start connection:%s", getStackTrace(e)), CONNECTION_START_FAILED);
+            throw new JMSRuntimeException(format("Fail to startClientInstance connection object[namesrvAddr:%s,instanceName:%s]. Error message:%s",
+                this.clientConfig.getNamesrvAddr(), this.clientConfig.getInstanceName(), getStackTrace(e)));
         }
+    }
+
+    @Override
+    public Session createSession() throws JMSException {
+        return createSession(false, DUPS_OK_ACKNOWLEDGE);
     }
 
     @Override
@@ -64,25 +92,20 @@ public class RocketMQConnection implements Connection {
     }
 
     @Override
-    public Session createSession() throws JMSException {
-        return createSession(false, Session.DUPS_OK_ACKNOWLEDGE);
-    }
-
-    @Override
     public Session createSession(boolean transacted, int acknowledgeMode) throws JMSException {
-        checkArgs(transacted, acknowledgeMode);
+        //todo: support transacted and more acknowledge mode
+        if (transacted) {
+            throw new JMSException("Not support local transaction session");
+        }
+        if (acknowledgeMode != DUPS_OK_ACKNOWLEDGE) {
+            throw new JMSException("Only support DUPS_OK_ACKNOWLEDGE mode");
+        }
 
-        Session session = new RocketMQSession(this, acknowledgeMode, transacted);
+        RocketMQSession session = new RocketMQSession(this, acknowledgeMode, transacted);
+        this.sessionList.add(session);
+
+        log.info("Success to create a session");
         return session;
-    }
-
-    private void checkArgs(boolean transacted, int acknowledgeMode) {
-        //todo: support local transaction
-        checkArgument(!transacted, "Not support local transaction Session at present");
-
-        //todo: support other acknowledgeMode
-        checkArgument(Session.DUPS_OK_ACKNOWLEDGE == acknowledgeMode,
-            "Only support DUPS_OK_ACKNOWLEDGE now");
     }
 
     @Override
@@ -90,7 +113,8 @@ public class RocketMQConnection implements Connection {
         String messageSelector,
         ServerSessionPool sessionPool,
         int maxMessages) throws JMSException {
-        throw new UnsupportedOperationException();
+        //todo
+        throw new JMSException("Not support yet");
     }
 
     @Override
@@ -98,19 +122,22 @@ public class RocketMQConnection implements Connection {
         String messageSelector,
         ServerSessionPool sessionPool,
         int maxMessages) throws JMSException {
-        throw new UnsupportedOperationException();
+        //todo
+        throw new JMSException("Not support yet");
     }
 
     @Override
     public ConnectionConsumer createSharedConnectionConsumer(Topic topic, String subscriptionName,
         String messageSelector, ServerSessionPool sessionPool, int maxMessages) throws JMSException {
-        throw new UnsupportedOperationException();
+        //todo
+        throw new JMSException("Not support yet");
     }
 
     @Override
     public ConnectionConsumer createSharedDurableConnectionConsumer(Topic topic, String subscriptionName,
         String messageSelector, ServerSessionPool sessionPool, int maxMessages) throws JMSException {
-        throw new UnsupportedOperationException();
+        //todo
+        throw new JMSException("Not support yet");
     }
 
     @Override
@@ -120,6 +147,9 @@ public class RocketMQConnection implements Connection {
 
     @Override
     public void setClientID(String clientID) throws JMSException {
+        if (isNotBlank(this.clientID)) {
+            throw new IllegalStateException("administratively client identifier has been configured.");
+        }
         this.clientID = clientID;
     }
 
@@ -130,36 +160,56 @@ public class RocketMQConnection implements Connection {
 
     @Override
     public ExceptionListener getExceptionListener() throws JMSException {
-        return this.exceptionListener;
+        //todo
+        throw new JMSException("Not support yet");
     }
 
     @Override
     public void setExceptionListener(ExceptionListener listener) throws JMSException {
-        this.exceptionListener = listener;
+        //todo
+        throw new JMSException("Not support yet");
     }
 
     @Override
     public void start() throws JMSException {
-        ConnectionContext context = ConnectionContext.get(this);
-
-        for (RocketMQConsumer consumer : context.getConsumers()) {
-            consumer.setPause(false);
+        for (RocketMQSession session : sessionList) {
+            for (RocketMQConsumer consumer : session.getConsumerList()) {
+                consumer.getMessageDeliveryService().recover();
+            }
         }
     }
 
     @Override
     public void stop() throws JMSException {
-        ConnectionContext context = ConnectionContext.get(this);
-
-        for (RocketMQConsumer consumer : context.getConsumers()) {
-            consumer.setPause(true);
+        for (RocketMQSession session : sessionList) {
+            for (RocketMQConsumer consumer : session.getConsumerList()) {
+                consumer.getMessageDeliveryService().pause();
+            }
         }
-
     }
 
     @Override
     public void close() throws JMSException {
+        log.info("Begin to close connection:{}", toString());
+
+        for (RocketMQSession session : sessionList) {
+            session.close();
+        }
+
         this.clientInstance.shutdown();
+
+        log.info("Success to close connection:{}", toString());
     }
 
+    public ClientConfig getClientConfig() {
+        return clientConfig;
+    }
+
+    @Override public String toString() {
+        return new ToStringBuilder(this)
+            .append("nameServerAddress", this.clientConfig.getNamesrvAddr())
+            .append("instanceName", this.clientConfig.getInstanceName())
+            .append("clientIdentifier", this.clientID)
+            .toString();
+    }
 }

@@ -18,6 +18,13 @@
 package org.apache.rocketmq.jms;
 
 public interface Constant {
+
+    String NO_MESSAGE_SELECTOR = "*";
+
+    boolean DEFAULT_NO_LOCAL = true;
+
+    boolean DEFAULT_DURABLE = false;
+
     //------------------------JMS message header constant---------------------------------
     String JMS_DESTINATION = "jmsDestination";
     String JMS_DELIVERY_MODE = "jmsDeliveryMode";
