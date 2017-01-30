@@ -186,8 +186,8 @@ public class RocketMQServer {
     public void createTopic(String topic) {
         TopicConfig topicConfig = new TopicConfig();
         topicConfig.setTopicName(topic);
-        topicConfig.setReadQueueNums(4);
-        topicConfig.setWriteQueueNums(4);
+        topicConfig.setReadQueueNums(1);
+        topicConfig.setWriteQueueNums(1);
         try {
             defaultMQAdminExt.createAndUpdateTopicConfig(this.brokerController.getBrokerAddr(), topicConfig);
         }

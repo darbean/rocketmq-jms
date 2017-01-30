@@ -17,11 +17,14 @@
 
 package org.apache.rocketmq.jms.integration;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import javax.jms.Connection;
 import javax.jms.ConnectionFactory;
 import javax.jms.Message;
 import javax.jms.MessageConsumer;
+import javax.jms.MessageListener;
 import javax.jms.MessageProducer;
 import javax.jms.Session;
 import javax.jms.TextMessage;
@@ -30,18 +33,14 @@ import org.apache.rocketmq.jms.RocketMQConnectionFactory;
 import org.junit.Test;
 
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.core.Is.is;
 import static org.hamcrest.core.IsNull.notNullValue;
 
 public class JmsClientTest extends IntegrationBaseTest {
 
-    /**
-     * Normal test: send and receive a durable message
-     *
-     * @throws Exception
-     */
     @Test
-    public void testProduceAndConsume() throws Exception {
-        final String rmqTopicName = "coffee-" + UUID.randomUUID().toString();
+    public void testConsumeSynchronous() throws Exception {
+        final String rmqTopicName = "coffee-syn" + UUID.randomUUID().toString();
         server.createTopic(rmqTopicName);
 
         ConnectionFactory factory = new RocketMQConnectionFactory(server.getNameServer(), clientId);
@@ -64,10 +63,48 @@ public class JmsClientTest extends IntegrationBaseTest {
             Message msg = consumer.receive();
 
             assertThat(msg, notNullValue());
-
-            connection.close();
         }
         finally {
+            connection.close();
+            server.deleteTopic(rmqTopicName);
+        }
+
+    }
+
+    @Test
+    public void testConsumeAsynchronous() throws Exception {
+        final String rmqTopicName = "coffee-async" + UUID.randomUUID().toString();
+        server.createTopic(rmqTopicName);
+
+        ConnectionFactory factory = new RocketMQConnectionFactory(server.getNameServer(), clientId);
+        Connection connection = factory.createConnection();
+        Session session = connection.createSession();
+        connection.start();
+        Topic topic = session.createTopic(rmqTopicName);
+
+        try {
+            //producer
+            TextMessage message = session.createTextMessage("mocha coffee,please");
+            MessageProducer producer = session.createProducer(topic);
+            producer.send(message);
+
+            //consumer
+            final List<Message> received = new ArrayList();
+            MessageConsumer consumer = session.createDurableConsumer(topic, "consumer");
+            consumer.setMessageListener(new MessageListener() {
+                @Override public void onMessage(Message message) {
+                    received.add(message);
+                }
+            });
+
+            connection.start();
+
+            Thread.sleep(1000 * 5);
+
+            assertThat(received.size(), is(1));
+        }
+        finally {
+            connection.close();
             server.deleteTopic(rmqTopicName);
         }
 

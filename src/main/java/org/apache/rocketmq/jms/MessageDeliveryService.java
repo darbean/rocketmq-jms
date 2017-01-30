@@ -133,7 +133,7 @@ public class MessageDeliveryService extends ServiceThread {
         Set<MessageQueue> mqs = this.rocketMQPullConsumer.fetchSubscribeMessageQueues(this.topicName);
         for (MessageQueue mq : mqs) {
             Long offset = beginOffset(mq);
-            PullResult pullResult = this.rocketMQPullConsumer.pull(mq, this.messageSelector, offset, PULL_BATCH_SIZE);
+            PullResult pullResult = this.rocketMQPullConsumer.pullBlockIfNotFound(mq, this.messageSelector, offset, PULL_BATCH_SIZE);
 
             switch (pullResult.getPullStatus()) {
                 case FOUND:
