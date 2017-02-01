@@ -24,7 +24,9 @@ import com.alibaba.rocketmq.client.exception.MQClientException;
 import com.alibaba.rocketmq.common.ServiceThread;
 import com.alibaba.rocketmq.common.message.MessageExt;
 import com.alibaba.rocketmq.common.message.MessageQueue;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -35,15 +37,16 @@ import javax.jms.JMSException;
 import javax.jms.JMSRuntimeException;
 import javax.jms.Message;
 import javax.jms.MessageConsumer;
-import javax.jms.MessageListener;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.rocketmq.jms.support.JmsHelper;
 import org.apache.rocketmq.jms.support.MessageConverter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static java.lang.String.format;
+
 /**
- * Service deliver messages synchronous or asynchronous, refer to {@link #handleMessage(MessageExt)}.
+ * Service deliver messages synchronous or asynchronous.
  */
 public class MessageDeliveryService extends ServiceThread {
 
@@ -56,6 +59,7 @@ public class MessageDeliveryService extends ServiceThread {
     private Destination destination;
     private String consumerGroup;
     private String topicName;
+    private ConsumeModel consumeModel = ConsumeModel.SYNC;
 
     /** only support RMQ subExpression */
     private String messageSelector;
@@ -66,19 +70,21 @@ public class MessageDeliveryService extends ServiceThread {
      */
     private boolean durable = false;
 
-    private BlockingQueue<MessageExt> msgQueue = new ArrayBlockingQueue(PULL_BATCH_SIZE);
+    private BlockingQueue<MessageWrapper> msgQueue = new ArrayBlockingQueue(PULL_BATCH_SIZE);
     private volatile boolean pause = true;
+    private final long index = COUNTER.incrementAndGet();
 
-    private MessageListener messageListener;
+    private Map<MessageQueue, Long> offsetMap = new HashMap();
 
     public MessageDeliveryService(RocketMQConsumer consumer, Destination destination, String consumerGroup) {
         this.consumer = consumer;
         this.destination = destination;
         this.consumerGroup = consumerGroup;
 
+        this.topicName = JmsHelper.getTopicName(destination);
+
         createAndStartRocketMQPullConsumer();
 
-        this.topicName = JmsHelper.getTopicName(destination);
     }
 
     private void createAndStartRocketMQPullConsumer() {
@@ -97,7 +103,7 @@ public class MessageDeliveryService extends ServiceThread {
 
     @Override
     public String getServiceName() {
-        return MessageDeliveryService.class.getSimpleName() + "-" + COUNTER.incrementAndGet();
+        return MessageDeliveryService.class.getSimpleName() + "-" + this.index;
     }
 
     @Override
@@ -121,29 +127,23 @@ public class MessageDeliveryService extends ServiceThread {
         log.info(this.getServiceName() + " service end");
     }
 
-    public MessageListener getMessageListener() {
-        return messageListener;
-    }
-
-    public void setMessageListener(MessageListener messageListener) {
-        this.messageListener = messageListener;
-    }
-
     private void pullMessage() throws Exception {
         Set<MessageQueue> mqs = this.rocketMQPullConsumer.fetchSubscribeMessageQueues(this.topicName);
         for (MessageQueue mq : mqs) {
-            Long offset = beginOffset(mq);
+            Long offset = offsetMap.get(mq);
+            if (offset == null) {
+                offset = beginOffset(mq);
+            }
             PullResult pullResult = this.rocketMQPullConsumer.pullBlockIfNotFound(mq, this.messageSelector, offset, PULL_BATCH_SIZE);
 
             switch (pullResult.getPullStatus()) {
                 case FOUND:
                     List<MessageExt> msgs = pullResult.getMsgFoundList();
+                    offsetMap.put(mq, pullResult.getMaxOffset());
                     for (MessageExt msg : msgs) {
-                        handleMessage(msg);
+                        handleMessage(msg, mq);
                     }
-                    //todo: if process crash before consumer receive messages stored in this queue, these messages will be lost
-                    this.rocketMQPullConsumer.updateConsumeOffset(mq, pullResult.getMaxOffset());
-                    log.info("Pull {} messages from topic:{},broker:{},queueId:{}", msgs.size(), mq.getTopic(), mq.getBrokerName(), mq.getQueueId());
+                    log.debug("Pull {} messages from topic:{},broker:{},queueId:{}", msgs.size(), mq.getTopic(), mq.getBrokerName(), mq.getQueueId());
                     break;
                 case NO_NEW_MSG:
                 case NO_MATCHED_MSG:
@@ -166,11 +166,10 @@ public class MessageDeliveryService extends ServiceThread {
     }
 
     /**
-     * If {@link #messageListener} is set, messages pulled from broker are handled by the {@link
-     * MessageListener#onMessage(Message)} in this thread. In other words, relative to the consumer created thread,
-     * messages are handled asynchronous.
+     * If {@link #consumeModel} is {@link ConsumeModel#ASYNC}, messages pulled from broker
+     * are handled in {@link MessageConsumeService} owned by its session.
      *
-     * If {@link #messageListener} is not set, messages pulled from broker are put
+     * If {@link #consumeModel} is {@link ConsumeModel#SYNC}, messages pulled from broker are put
      * into a memory blocking queue, waiting for the {@link MessageConsumer#receive()}
      * using {@link BlockingQueue#poll()} to handle messages synchronous.
      *
@@ -178,29 +177,43 @@ public class MessageDeliveryService extends ServiceThread {
      * @throws InterruptedException
      * @throws JMSException
      */
-    private void handleMessage(MessageExt msg) throws InterruptedException, JMSException {
-        if (this.messageListener == null) {
-            this.msgQueue.put(msg);
-        }
-        else {
-            this.messageListener.onMessage(MessageConverter.convert2JMSMessage(msg));
+    private void handleMessage(MessageExt msg, MessageQueue mq) throws InterruptedException, JMSException {
+        Message jmsMessage = MessageConverter.convert2JMSMessage(msg);
+        final MessageWrapper wrapper = new MessageWrapper(jmsMessage, this.consumer, mq, msg.getQueueOffset());
+
+        switch (this.consumeModel) {
+            case SYNC:
+                this.msgQueue.put(wrapper);
+                break;
+            case ASYNC:
+                this.consumer.getSession().getMessageConsumeService().put(wrapper);
+                break;
+            default:
+                throw new JMSException(format("Unsupported consume model[%s]", this.consumeModel));
         }
     }
 
-    public Message poll() throws JMSException {
+    public void ack(MessageQueue mq, Long offset) throws JMSException {
         try {
-            MessageExt msgExt = this.msgQueue.take();
-            return MessageConverter.convert2JMSMessage(msgExt);
+            this.rocketMQPullConsumer.updateConsumeOffset(mq, offset);
+        }
+        catch (MQClientException e) {
+            throw new JMSException(format("Fail to ack offset[mq:%s,offset:%s]", mq, offset));
+        }
+    }
+
+    public MessageWrapper poll() throws JMSException {
+        try {
+            return this.msgQueue.take();
         }
         catch (InterruptedException e) {
             throw new JMSException(e.getMessage());
         }
     }
 
-    public Message poll(long timeout, TimeUnit timeUnit) throws JMSException {
+    public MessageWrapper poll(long timeout, TimeUnit timeUnit) throws JMSException {
         try {
-            MessageExt msgExt = this.msgQueue.poll(timeout, timeUnit);
-            return MessageConverter.convert2JMSMessage(msgExt);
+            return this.msgQueue.poll(timeout, timeUnit);
         }
         catch (InterruptedException e) {
             throw new JMSException(e.getMessage());
@@ -216,20 +229,15 @@ public class MessageDeliveryService extends ServiceThread {
     }
 
     public void close() {
-        log.info("Begin to close message delivery service:{}", toString());
+        log.info("Begin to close message delivery service:{}", getServiceName());
 
         this.stop();
 
-        // waiting for pending messages being received by consumer to prevent these messages from missing
-        while (!msgQueue.isEmpty()) {
-            this.waitForRunning(1000);
-        }
-
         this.rocketMQPullConsumer.shutdown();
 
-        this.shutdown();
+        this.shutdown(true);
 
-        log.info("Success to close message delivery service:{}", toString());
+        log.info("Success to close message delivery service:{}", getServiceName());
     }
 
     public void setMessageSelector(String messageSelector) {
@@ -240,4 +248,7 @@ public class MessageDeliveryService extends ServiceThread {
         this.durable = durable;
     }
 
+    public void setConsumeModel(ConsumeModel consumeModel) {
+        this.consumeModel = consumeModel;
+    }
 }

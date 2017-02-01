@@ -61,6 +61,8 @@ public class RocketMQSession implements Session {
 
     private boolean transacted;
 
+    private MessageConsumeService messageConsumeService;
+
     private final List<RocketMQProducer> producerList = new ArrayList();
 
     private final List<RocketMQConsumer> consumerList = new ArrayList();
@@ -73,6 +75,9 @@ public class RocketMQSession implements Session {
         this.connection = connection;
         this.acknowledgeMode = acknowledgeMode;
         this.transacted = transacted;
+
+        this.messageConsumeService = new MessageConsumeService(this);
+        this.messageConsumeService.start();
     }
 
     @Override
@@ -83,7 +88,7 @@ public class RocketMQSession implements Session {
     @Override
     public MapMessage createMapMessage() throws JMSException {
         //todo
-        return null;
+        throw new JMSException("Not support yet");
     }
 
     @Override
@@ -342,5 +347,9 @@ public class RocketMQSession implements Session {
 
     public boolean isSyncModel() {
         return !this.syncConsumerSet.isEmpty();
+    }
+
+    public MessageConsumeService getMessageConsumeService() {
+        return messageConsumeService;
     }
 }

@@ -51,7 +51,7 @@ public class JmsClientTest extends IntegrationBaseTest {
 
         try {
             //producer
-            TextMessage message = session.createTextMessage("mocha coffee,please");
+            TextMessage message = session.createTextMessage("a");
             MessageProducer producer = session.createProducer(topic);
             producer.send(message);
 

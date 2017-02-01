@@ -77,7 +77,7 @@ public class RocketMQConsumer implements MessageConsumer {
         }
 
         this.messageListener = listener;
-        this.messageDeliveryService.setMessageListener(listener);
+        this.messageDeliveryService.setConsumeModel(ConsumeModel.ASYNC);
         this.session.addAsyncConsumer(this);
     }
 
@@ -95,10 +95,14 @@ public class RocketMQConsumer implements MessageConsumer {
         this.session.addSyncConsumer(this);
 
         if (timeout == 0) {
-            return this.messageDeliveryService.poll();
+            MessageWrapper wrapper = this.messageDeliveryService.poll();
+            wrapper.getConsumer().getMessageDeliveryService().ack(wrapper.getMq(), wrapper.getOffset());
+            return wrapper.getMessage();
         }
         else {
-            return this.messageDeliveryService.poll(timeout, TimeUnit.MILLISECONDS);
+            MessageWrapper wrapper = this.messageDeliveryService.poll(timeout, TimeUnit.MILLISECONDS);
+            wrapper.getConsumer().getMessageDeliveryService().ack(wrapper.getMq(), wrapper.getOffset());
+            return wrapper.getMessage();
         }
     }
 

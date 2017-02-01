@@ -39,7 +39,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static java.lang.String.format;
-import static javax.jms.Session.DUPS_OK_ACKNOWLEDGE;
+import static javax.jms.Session.AUTO_ACKNOWLEDGE;
 import static javax.jms.Session.SESSION_TRANSACTED;
 import static org.apache.commons.lang.StringUtils.isNotBlank;
 import static org.apache.commons.lang.exception.ExceptionUtils.getStackTrace;
@@ -78,7 +78,7 @@ public class RocketMQConnection implements Connection {
 
     @Override
     public Session createSession() throws JMSException {
-        return createSession(false, DUPS_OK_ACKNOWLEDGE);
+        return createSession(false, AUTO_ACKNOWLEDGE);
     }
 
     @Override
@@ -97,8 +97,8 @@ public class RocketMQConnection implements Connection {
         if (transacted) {
             throw new JMSException("Not support local transaction session");
         }
-        if (acknowledgeMode != DUPS_OK_ACKNOWLEDGE) {
-            throw new JMSException("Only support DUPS_OK_ACKNOWLEDGE mode");
+        if (acknowledgeMode != AUTO_ACKNOWLEDGE) {
+            throw new JMSException("Only support AUTO_ACKNOWLEDGE mode now");
         }
 
         RocketMQSession session = new RocketMQSession(this, acknowledgeMode, transacted);
