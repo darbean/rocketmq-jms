@@ -25,21 +25,21 @@ import javax.jms.JMSRuntimeException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class MessageConsumeService extends ServiceThread {
+public class ConsumeMessageService extends ServiceThread {
 
-    private static final Logger log = LoggerFactory.getLogger(MessageDeliveryService.class);
+    private static final Logger log = LoggerFactory.getLogger(DeliverMessageService.class);
     private static final AtomicLong COUNTER = new AtomicLong(0L);
 
     private BlockingQueue<MessageWrapper> queue = new ArrayBlockingQueue(1000);
     private RocketMQSession session;
     private final long index = COUNTER.incrementAndGet();
 
-    public MessageConsumeService(RocketMQSession session) {
+    public ConsumeMessageService(RocketMQSession session) {
         this.session = session;
     }
 
     @Override public String getServiceName() {
-        return MessageConsumeService.class.getSimpleName() + "-" + this.index;
+        return ConsumeMessageService.class.getSimpleName() + "-" + this.index;
     }
 
     @Override public void run() {
@@ -50,7 +50,7 @@ public class MessageConsumeService extends ServiceThread {
                 MessageWrapper wrapper = queue.take();
                 RocketMQConsumer consumer = wrapper.getConsumer();
                 consumer.getMessageListener().onMessage(wrapper.getMessage());
-                consumer.getMessageDeliveryService().ack(wrapper.getMq(), wrapper.getOffset());
+                consumer.getDeliverMessageService().ack(wrapper.getMq(), wrapper.getOffset());
             }
             catch (Exception e) {
                 log.error(e.getMessage(), e);

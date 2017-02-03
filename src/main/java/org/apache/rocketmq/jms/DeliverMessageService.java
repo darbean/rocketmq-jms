@@ -48,9 +48,9 @@ import static java.lang.String.format;
 /**
  * Service deliver messages synchronous or asynchronous.
  */
-public class MessageDeliveryService extends ServiceThread {
+public class DeliverMessageService extends ServiceThread {
 
-    private static final Logger log = LoggerFactory.getLogger(MessageDeliveryService.class);
+    private static final Logger log = LoggerFactory.getLogger(DeliverMessageService.class);
     private static final AtomicLong COUNTER = new AtomicLong(0L);
     private static final int PULL_BATCH_SIZE = 100;
 
@@ -76,7 +76,7 @@ public class MessageDeliveryService extends ServiceThread {
 
     private Map<MessageQueue, Long> offsetMap = new HashMap();
 
-    public MessageDeliveryService(RocketMQConsumer consumer, Destination destination, String consumerGroup) {
+    public DeliverMessageService(RocketMQConsumer consumer, Destination destination, String consumerGroup) {
         this.consumer = consumer;
         this.destination = destination;
         this.consumerGroup = consumerGroup;
@@ -103,7 +103,7 @@ public class MessageDeliveryService extends ServiceThread {
 
     @Override
     public String getServiceName() {
-        return MessageDeliveryService.class.getSimpleName() + "-" + this.index;
+        return DeliverMessageService.class.getSimpleName() + "-" + this.index;
     }
 
     @Override
@@ -167,7 +167,7 @@ public class MessageDeliveryService extends ServiceThread {
 
     /**
      * If {@link #consumeModel} is {@link ConsumeModel#ASYNC}, messages pulled from broker
-     * are handled in {@link MessageConsumeService} owned by its session.
+     * are handled in {@link ConsumeMessageService} owned by its session.
      *
      * If {@link #consumeModel} is {@link ConsumeModel#SYNC}, messages pulled from broker are put
      * into a memory blocking queue, waiting for the {@link MessageConsumer#receive()}
@@ -186,7 +186,7 @@ public class MessageDeliveryService extends ServiceThread {
                 this.msgQueue.put(wrapper);
                 break;
             case ASYNC:
-                this.consumer.getSession().getMessageConsumeService().put(wrapper);
+                this.consumer.getSession().getConsumeMessageService().put(wrapper);
                 break;
             default:
                 throw new JMSException(format("Unsupported consume model[%s]", this.consumeModel));

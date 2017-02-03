@@ -61,7 +61,7 @@ public class RocketMQSession implements Session {
 
     private boolean transacted;
 
-    private MessageConsumeService messageConsumeService;
+    private ConsumeMessageService consumeMessageService;
 
     private final List<RocketMQProducer> producerList = new ArrayList();
 
@@ -76,8 +76,8 @@ public class RocketMQSession implements Session {
         this.acknowledgeMode = acknowledgeMode;
         this.transacted = transacted;
 
-        this.messageConsumeService = new MessageConsumeService(this);
-        this.messageConsumeService.start();
+        this.consumeMessageService = new ConsumeMessageService(this);
+        this.consumeMessageService.start();
     }
 
     @Override
@@ -349,7 +349,7 @@ public class RocketMQSession implements Session {
         return !this.syncConsumerSet.isEmpty();
     }
 
-    public MessageConsumeService getMessageConsumeService() {
-        return messageConsumeService;
+    public ConsumeMessageService getConsumeMessageService() {
+        return consumeMessageService;
     }
 }

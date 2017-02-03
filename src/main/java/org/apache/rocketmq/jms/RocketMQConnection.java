@@ -174,7 +174,7 @@ public class RocketMQConnection implements Connection {
     public void start() throws JMSException {
         for (RocketMQSession session : sessionList) {
             for (RocketMQConsumer consumer : session.getConsumerList()) {
-                consumer.getMessageDeliveryService().recover();
+                consumer.getDeliverMessageService().recover();
             }
         }
     }
@@ -183,7 +183,7 @@ public class RocketMQConnection implements Connection {
     public void stop() throws JMSException {
         for (RocketMQSession session : sessionList) {
             for (RocketMQConsumer consumer : session.getConsumerList()) {
-                consumer.getMessageDeliveryService().pause();
+                consumer.getDeliverMessageService().pause();
             }
         }
     }

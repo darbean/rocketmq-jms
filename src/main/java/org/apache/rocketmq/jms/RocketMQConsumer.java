@@ -37,7 +37,7 @@ public class RocketMQConsumer implements MessageConsumer {
     private String sharedSubscriptionName;
     private boolean durable;
 
-    private MessageDeliveryService messageDeliveryService;
+    private DeliverMessageService deliverMessageService;
 
     public RocketMQConsumer(RocketMQSession session, Destination destination,
         String messageSelector,
@@ -54,10 +54,10 @@ public class RocketMQConsumer implements MessageConsumer {
         this.sharedSubscriptionName = sharedSubscriptionName;
         this.durable = durable;
 
-        this.messageDeliveryService = new MessageDeliveryService(this, this.destination, this.sharedSubscriptionName);
-        this.messageDeliveryService.setMessageSelector(this.messageSelector);
-        this.messageDeliveryService.setDurable(this.durable);
-        this.messageDeliveryService.start();
+        this.deliverMessageService = new DeliverMessageService(this, this.destination, this.sharedSubscriptionName);
+        this.deliverMessageService.setMessageSelector(this.messageSelector);
+        this.deliverMessageService.setDurable(this.durable);
+        this.deliverMessageService.start();
     }
 
     @Override
@@ -77,7 +77,7 @@ public class RocketMQConsumer implements MessageConsumer {
         }
 
         this.messageListener = listener;
-        this.messageDeliveryService.setConsumeModel(ConsumeModel.ASYNC);
+        this.deliverMessageService.setConsumeModel(ConsumeModel.ASYNC);
         this.session.addAsyncConsumer(this);
     }
 
@@ -95,13 +95,13 @@ public class RocketMQConsumer implements MessageConsumer {
         this.session.addSyncConsumer(this);
 
         if (timeout == 0) {
-            MessageWrapper wrapper = this.messageDeliveryService.poll();
-            wrapper.getConsumer().getMessageDeliveryService().ack(wrapper.getMq(), wrapper.getOffset());
+            MessageWrapper wrapper = this.deliverMessageService.poll();
+            wrapper.getConsumer().getDeliverMessageService().ack(wrapper.getMq(), wrapper.getOffset());
             return wrapper.getMessage();
         }
         else {
-            MessageWrapper wrapper = this.messageDeliveryService.poll(timeout, TimeUnit.MILLISECONDS);
-            wrapper.getConsumer().getMessageDeliveryService().ack(wrapper.getMq(), wrapper.getOffset());
+            MessageWrapper wrapper = this.deliverMessageService.poll(timeout, TimeUnit.MILLISECONDS);
+            wrapper.getConsumer().getDeliverMessageService().ack(wrapper.getMq(), wrapper.getOffset());
             return wrapper.getMessage();
         }
     }
@@ -115,21 +115,21 @@ public class RocketMQConsumer implements MessageConsumer {
     public void close() throws JMSException {
         log.info("Begin to close consumer:{}", toString());
 
-        this.messageDeliveryService.close();
+        this.deliverMessageService.close();
 
         log.info("Success to close consumer:{}", toString());
     }
 
     public void start() {
-        this.messageDeliveryService.recover();
+        this.deliverMessageService.recover();
     }
 
     public void stop() {
-        this.messageDeliveryService.pause();
+        this.deliverMessageService.pause();
     }
 
-    public MessageDeliveryService getMessageDeliveryService() {
-        return messageDeliveryService;
+    public DeliverMessageService getDeliverMessageService() {
+        return deliverMessageService;
     }
 
     public RocketMQSession getSession() {
