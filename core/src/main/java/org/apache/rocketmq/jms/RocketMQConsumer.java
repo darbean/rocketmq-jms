@@ -101,6 +101,9 @@ public class RocketMQConsumer implements MessageConsumer {
         }
         else {
             MessageWrapper wrapper = this.deliverMessageService.poll(timeout, TimeUnit.MILLISECONDS);
+            if (wrapper == null) {
+                return null;
+            }
             wrapper.getConsumer().getDeliverMessageService().ack(wrapper.getMq(), wrapper.getOffset());
             return wrapper.getMessage();
         }
@@ -113,11 +116,7 @@ public class RocketMQConsumer implements MessageConsumer {
 
     @Override
     public void close() throws JMSException {
-        log.info("Begin to close consumer:{}", toString());
-
         this.deliverMessageService.close();
-
-        log.info("Success to close consumer:{}", toString());
     }
 
     public void start() {

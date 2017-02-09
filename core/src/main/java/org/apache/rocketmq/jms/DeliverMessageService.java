@@ -85,6 +85,12 @@ public class DeliverMessageService extends ServiceThread {
 
         createAndStartRocketMQPullConsumer();
 
+        if (this.consumer.getSession().getConnection().isStarted()) {
+            this.recover();
+        }
+        else {
+            this.pause();
+        }
     }
 
     private void createAndStartRocketMQPullConsumer() {
@@ -108,8 +114,6 @@ public class DeliverMessageService extends ServiceThread {
 
     @Override
     public void run() {
-        log.info(this.getServiceName() + " service started");
-
         while (!isStoped()) {
             if (pause) {
                 this.waitForRunning(1000);
@@ -119,12 +123,13 @@ public class DeliverMessageService extends ServiceThread {
             try {
                 pullMessage();
             }
+            catch (InterruptedException e) {
+                log.info("Pulling messages service has been interrupted");
+            }
             catch (Exception e) {
                 log.error("Error during pulling messages", e);
             }
         }
-
-        log.info(this.getServiceName() + " service end");
     }
 
     private void pullMessage() throws Exception {

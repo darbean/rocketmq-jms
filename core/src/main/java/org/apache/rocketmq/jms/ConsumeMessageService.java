@@ -43,8 +43,6 @@ public class ConsumeMessageService extends ServiceThread {
     }
 
     @Override public void run() {
-        log.info(this.getServiceName() + " service started");
-
         while (!this.isStoped()) {
             try {
                 MessageWrapper wrapper = queue.take();
@@ -56,8 +54,6 @@ public class ConsumeMessageService extends ServiceThread {
                 log.error(e.getMessage(), e);
             }
         }
-
-        log.info(this.getServiceName() + " service end");
     }
 
     public void put(MessageWrapper wrapper) {

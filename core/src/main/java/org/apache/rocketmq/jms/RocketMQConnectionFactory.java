@@ -82,7 +82,7 @@ public class RocketMQConnectionFactory implements ConnectionFactory {
         final String instanceName = JmsHelper.uuid();
         RocketMQConnection connection = new RocketMQConnection(this.nameServerAddress, this.clientId, instanceName);
 
-        log.info("Success to create a connection[clientIdentifier:{},userName:{}", instanceName, clientId, userName);
+        log.info("Create a connection successfully[instanceName:{},clientIdentifier:{},userName:{}", instanceName, clientId, userName);
         return connection;
     }
 

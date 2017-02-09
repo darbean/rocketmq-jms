@@ -146,16 +146,12 @@ public class RocketMQSession implements Session {
 
     @Override
     public void close() throws JMSException {
-        log.info("Begin to close session:{}", toString());
-
         for (RocketMQProducer producer : this.producerList) {
             producer.close();
         }
         for (RocketMQConsumer consumer : this.consumerList) {
             consumer.close();
         }
-
-        log.info("Success to close session:{}", toString());
     }
 
     @Override
@@ -186,8 +182,6 @@ public class RocketMQSession implements Session {
     public MessageProducer createProducer(Destination destination) throws JMSException {
         RocketMQProducer producer = new RocketMQProducer(this, destination);
         this.producerList.add(producer);
-
-        log.info("Success to create a producer[destination={}]", destination.toString());
         return producer;
     }
 
@@ -208,8 +202,6 @@ public class RocketMQSession implements Session {
         RocketMQConsumer consumer = new RocketMQConsumer(this, destination, messageSelector, DEFAULT_DURABLE);
         this.consumerList.add(consumer);
 
-        log.info("Success to create a non-shared,non-durable consumer[destination={},messageSelector={},noLocal={}",
-            destination.toString(), messageSelector, noLocal);
         return consumer;
     }
 
@@ -224,8 +216,6 @@ public class RocketMQSession implements Session {
         RocketMQConsumer consumer = new RocketMQConsumer(this, topic, messageSelector, sharedSubscriptionName, DEFAULT_DURABLE);
         this.consumerList.add(consumer);
 
-        log.info("Success to create a shared,non-durable consumer[topic={},messageSelector={}",
-            topic.getTopicName(), messageSelector);
         return consumer;
     }
 
@@ -250,8 +240,6 @@ public class RocketMQSession implements Session {
         RocketMQTopicSubscriber subscriber = new RocketMQTopicSubscriber(this, topic, messageSelector, name, true);
         this.consumerList.add(subscriber);
 
-        log.info("Success to create a non-shared,durable subscriber[topic={},name={},messageSelector={},noLocal={}",
-            topic.getTopicName(), name, messageSelector, noLocal);
         return subscriber;
     }
 
@@ -266,8 +254,6 @@ public class RocketMQSession implements Session {
         RocketMQConsumer consumer = new RocketMQConsumer(this, topic, messageSelector, name, true);
         this.consumerList.add(consumer);
 
-        log.info("Success to create a non-shared,durable consumer[topic={},name={},messageSelector={},noLocal={}",
-            topic.getTopicName(), name, messageSelector, noLocal);
         return consumer;
     }
 
@@ -282,8 +268,6 @@ public class RocketMQSession implements Session {
         RocketMQConsumer consumer = new RocketMQConsumer(this, topic, messageSelector, name, true);
         this.consumerList.add(consumer);
 
-        log.info("Success to create a shared,durable consumer[topic={},name={},messageSelector={}",
-            topic.getTopicName(), name, messageSelector);
         return consumer;
     }
 

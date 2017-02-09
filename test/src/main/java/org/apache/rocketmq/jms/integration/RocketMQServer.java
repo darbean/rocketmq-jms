@@ -8,51 +8,50 @@
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package org.apache.rocketmq.jms.integration;
 
 import com.alibaba.rocketmq.broker.BrokerController;
-import com.alibaba.rocketmq.client.exception.MQClientException;
 import com.alibaba.rocketmq.common.BrokerConfig;
 import com.alibaba.rocketmq.common.MixAll;
-import com.alibaba.rocketmq.common.TopicConfig;
 import com.alibaba.rocketmq.common.namesrv.NamesrvConfig;
 import com.alibaba.rocketmq.namesrv.NamesrvController;
 import com.alibaba.rocketmq.remoting.netty.NettyClientConfig;
 import com.alibaba.rocketmq.remoting.netty.NettyServerConfig;
 import com.alibaba.rocketmq.store.config.MessageStoreConfig;
-import com.alibaba.rocketmq.tools.admin.DefaultMQAdminExt;
-import com.google.common.collect.Sets;
 import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.Random;
+import javax.annotation.PostConstruct;
+import javax.annotation.PreDestroy;
 import org.junit.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
 
 import static java.io.File.separator;
-import static java.lang.String.format;
-import static org.apache.commons.lang.exception.ExceptionUtils.getStackTrace;
+import static org.apache.rocketmq.jms.integration.Constant.BROKER_HA_PORT;
+import static org.apache.rocketmq.jms.integration.Constant.BROKER_PORT;
+import static org.apache.rocketmq.jms.integration.Constant.NAME_SERVER_ADDRESS;
 
+@Service
 public class RocketMQServer {
-    public static Logger logger = LoggerFactory.getLogger(RocketMQServer.class);
-    private static RocketMQServer server = new RocketMQServer();
+    public static Logger log = LoggerFactory.getLogger(RocketMQServer.class);
     private static final SimpleDateFormat sf = new SimpleDateFormat("yyyyMMddHHmmss");
     private static final String rootDir = System.getProperty("user.home") + separator + "rocketmq-jms" + separator;
+    // fixed location of config files which is updated after RMQ3.2.6
+    private static final String configDir = System.getProperty("user.home") + separator + "store/config";
 
-    private Random random = new Random();
     private String serverDir;
     private volatile boolean started = false;
 
     //name server
-    private String nameServer;
     private NamesrvConfig namesrvConfig = new NamesrvConfig();
     private NettyServerConfig nameServerNettyServerConfig = new NettyServerConfig();
     private NamesrvController namesrvController;
@@ -65,18 +64,12 @@ public class RocketMQServer {
     private NettyClientConfig nettyClientConfig = new NettyClientConfig();
     private MessageStoreConfig storeConfig = new MessageStoreConfig();
 
-    //MQAdmin client
-    private DefaultMQAdminExt defaultMQAdminExt = new DefaultMQAdminExt();
-
-    private RocketMQServer() {
+    public RocketMQServer() {
         this.storeConfig.setDiskMaxUsedSpaceRatio(95);
     }
 
-    public static RocketMQServer instance() {
-        return server;
-    }
-
-    public synchronized void start() {
+    @PostConstruct
+    public void start() {
         if (started) {
             return;
         }
@@ -87,11 +80,9 @@ public class RocketMQServer {
 
         startBroker();
 
-        startMQAdmin();
-
-        addShutdownHook();
-
         started = true;
+
+        log.info("Start RocketServer Successfully");
     }
 
     private void createServerDir() {
@@ -102,69 +93,54 @@ public class RocketMQServer {
                 return;
             }
         }
-        System.out.println("Has retry 5 times to register base dir,but still failed.");
+        log.error("Has retry 5 times to register base dir,but still failed.");
         System.exit(1);
     }
 
     private void startNameServer() {
         namesrvConfig.setKvConfigPath(serverDir + separator + "namesrv" + separator + "kvConfig.json");
-        nameServerNettyServerConfig.setListenPort(9000 + random.nextInt(1000));
+        nameServerNettyServerConfig.setListenPort(Constant.NAME_SERVER_PORT);
         namesrvController = new NamesrvController(namesrvConfig, nameServerNettyServerConfig);
         try {
             Assert.assertTrue(namesrvController.initialize());
-            logger.info("Name Server Start:{}", nameServerNettyServerConfig.getListenPort());
+            log.info("Success to start Name Server:{}", NAME_SERVER_ADDRESS);
             namesrvController.start();
         }
         catch (Exception e) {
-            System.out.println(format("Name Server start failed, stack trace:%s", getStackTrace(e)));
+            log.error("Failed to start Name Server", e);
             System.exit(1);
         }
-        nameServer = "127.0.0.1:" + nameServerNettyServerConfig.getListenPort();
-        System.setProperty(MixAll.NAMESRV_ADDR_PROPERTY, nameServer);
+        System.setProperty(MixAll.NAMESRV_ADDR_PROPERTY, NAME_SERVER_ADDRESS);
     }
 
     private void startBroker() {
         brokerConfig.setBrokerName(BROKER_NAME);
-        brokerConfig.setBrokerIP1("127.0.0.1");
-        brokerConfig.setNamesrvAddr(nameServer);
+        brokerConfig.setBrokerIP1(Constant.BROKER_IP);
+        brokerConfig.setNamesrvAddr(NAME_SERVER_ADDRESS);
         storeConfig.setStorePathRootDir(serverDir);
         storeConfig.setStorePathCommitLog(serverDir + separator + "commitlog");
-        storeConfig.setHaListenPort(8000 + random.nextInt(1000));
-        nettyServerConfig.setListenPort(10000 + random.nextInt(1000));
+        storeConfig.setHaListenPort(BROKER_HA_PORT);
+        nettyServerConfig.setListenPort(BROKER_PORT);
         brokerController = new BrokerController(brokerConfig, nettyServerConfig, nettyClientConfig, storeConfig);
-        defaultMQAdminExt.setNamesrvAddr(nameServer);
+
         try {
             Assert.assertTrue(brokerController.initialize());
-            logger.info("Broker Start name:{} addr:{}", brokerConfig.getBrokerName(), brokerController.getBrokerAddr());
+            log.info("Broker Start name:{} address:{}", brokerConfig.getBrokerName(), brokerController.getBrokerAddr());
             brokerController.start();
 
         }
         catch (Exception e) {
-            System.out.println(format("Broker start failed, stack trace:%s", getStackTrace(e)));
+            log.error("Failed to start Broker", e);
             System.exit(1);
         }
     }
 
-    private void startMQAdmin() {
-        try {
-            defaultMQAdminExt.start();
-        }
-        catch (MQClientException e) {
-            System.out.println(format("MQAdmin start failed, stack trace:%s", getStackTrace(e)));
-            System.exit(1);
-        }
-    }
-
-    private void addShutdownHook() {
-        Runtime.getRuntime().addShutdownHook(new Thread() {
-            @Override
-            public void run() {
-                defaultMQAdminExt.shutdown();
-                brokerController.shutdown();
-                namesrvController.shutdown();
-                deleteFile(new File(rootDir));
-            }
-        });
+    @PreDestroy
+    private void shutdown() {
+        brokerController.shutdown();
+        namesrvController.shutdown();
+        deleteFile(new File(rootDir));
+        deleteFile(new File(configDir));
     }
 
     public void deleteFile(File file) {
@@ -183,29 +159,4 @@ public class RocketMQServer {
         }
     }
 
-    public void createTopic(String topic) {
-        TopicConfig topicConfig = new TopicConfig();
-        topicConfig.setTopicName(topic);
-        topicConfig.setReadQueueNums(1);
-        topicConfig.setWriteQueueNums(1);
-        try {
-            defaultMQAdminExt.createAndUpdateTopicConfig(this.brokerController.getBrokerAddr(), topicConfig);
-        }
-        catch (Exception e) {
-            logger.error("Create topic:{}, addr:{} failed", topic, this.brokerController.getBrokerAddr());
-        }
-    }
-
-    public void deleteTopic(String topic) {
-        try {
-            defaultMQAdminExt.deleteTopicInBroker(Sets.newHashSet(this.brokerController.getBrokerAddr()), topic);
-        }
-        catch (Exception e) {
-            logger.error("Delete topic:{}, addr:{} failed", topic, this.brokerController.getBrokerAddr());
-        }
-    }
-
-    public String getNameServer() {
-        return this.nameServer;
-    }
 }

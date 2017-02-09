@@ -23,6 +23,7 @@ import com.alibaba.rocketmq.client.impl.MQClientManager;
 import com.alibaba.rocketmq.client.impl.factory.MQClientInstance;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import javax.jms.Connection;
 import javax.jms.ConnectionConsumer;
 import javax.jms.ConnectionMetaData;
@@ -53,6 +54,7 @@ public class RocketMQConnection implements Connection {
     private MQClientInstance clientInstance;
 
     private List<RocketMQSession> sessionList = new ArrayList();
+    private AtomicBoolean started = new AtomicBoolean(false);
 
     protected RocketMQConnection(String nameServerAddress, String clientID, String instanceName) {
         this.clientID = clientID;
@@ -104,7 +106,6 @@ public class RocketMQConnection implements Connection {
         RocketMQSession session = new RocketMQSession(this, acknowledgeMode, transacted);
         this.sessionList.add(session);
 
-        log.info("Success to create a session");
         return session;
     }
 
@@ -172,19 +173,25 @@ public class RocketMQConnection implements Connection {
 
     @Override
     public void start() throws JMSException {
-        for (RocketMQSession session : sessionList) {
-            for (RocketMQConsumer consumer : session.getConsumerList()) {
-                consumer.getDeliverMessageService().recover();
+        if (this.started.compareAndSet(false, true)) {
+            for (RocketMQSession session : sessionList) {
+                for (RocketMQConsumer consumer : session.getConsumerList()) {
+                    consumer.getDeliverMessageService().recover();
+                }
             }
+            log.debug("Start connection successfully:{}", toString());
         }
     }
 
     @Override
     public void stop() throws JMSException {
-        for (RocketMQSession session : sessionList) {
-            for (RocketMQConsumer consumer : session.getConsumerList()) {
-                consumer.getDeliverMessageService().pause();
+        if (this.started.compareAndSet(true, false)) {
+            for (RocketMQSession session : sessionList) {
+                for (RocketMQConsumer consumer : session.getConsumerList()) {
+                    consumer.getDeliverMessageService().pause();
+                }
             }
+            log.debug("Stop connection successfully:{}", toString());
         }
     }
 
@@ -199,6 +206,10 @@ public class RocketMQConnection implements Connection {
         this.clientInstance.shutdown();
 
         log.info("Success to close connection:{}", toString());
+    }
+
+    public boolean isStarted() {
+        return started.get();
     }
 
     public ClientConfig getClientConfig() {

@@ -40,6 +40,7 @@ import static javax.jms.Message.DEFAULT_DELIVERY_MODE;
 import static javax.jms.Message.DEFAULT_PRIORITY;
 import static javax.jms.Message.DEFAULT_TIME_TO_LIVE;
 import static org.apache.commons.lang.exception.ExceptionUtils.getStackTrace;
+import static org.apache.rocketmq.jms.support.MessageConverter.JMS_MSGMODEL;
 
 public class RocketMQProducer implements MessageProducer {
 
@@ -143,11 +144,7 @@ public class RocketMQProducer implements MessageProducer {
 
     @Override
     public void close() throws JMSException {
-        log.info("Begin to close producer:{}", toString());
-
         this.mqProducer.shutdown();
-
-        log.info("Success to close producer:{}", toString());
     }
 
     @Override
@@ -187,7 +184,7 @@ public class RocketMQProducer implements MessageProducer {
         }
 
         if (sendResult != null && sendResult.getSendStatus() == SendStatus.SEND_OK) {
-            log.info("Success to send message[key={}]", rmqMsg.getKeys());
+            log.debug("Success to send message[key={}]", rmqMsg.getKeys());
             return;
         }
         else {
@@ -207,8 +204,9 @@ public class RocketMQProducer implements MessageProducer {
 
     private com.alibaba.rocketmq.common.message.Message createRmqMessage(Message message,
         String topicName) throws JMSException {
-        byte[] content = MessageConverter.getContentFromJms(message);
-        com.alibaba.rocketmq.common.message.Message rmqMsg = new com.alibaba.rocketmq.common.message.Message(topicName, content);
+        JmsContent jmsContent = MessageConverter.getContentFromJms(message);
+        com.alibaba.rocketmq.common.message.Message rmqMsg = new com.alibaba.rocketmq.common.message.Message(topicName, jmsContent.getContent());
+        rmqMsg.putUserProperty(JMS_MSGMODEL, jmsContent.getMessageModel());
         rmqMsg.setKeys(System.currentTimeMillis() + "" + counter.incrementAndGet());
         return rmqMsg;
     }

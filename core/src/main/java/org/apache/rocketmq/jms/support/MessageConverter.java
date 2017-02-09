@@ -33,6 +33,7 @@ import javax.jms.ObjectMessage;
 import javax.jms.TextMessage;
 import org.apache.commons.lang.StringUtils;
 import org.apache.rocketmq.jms.Constant;
+import org.apache.rocketmq.jms.JmsContent;
 import org.apache.rocketmq.jms.msg.RocketMQBytesMessage;
 import org.apache.rocketmq.jms.msg.RocketMQMessage;
 import org.apache.rocketmq.jms.msg.RocketMQObjectMessage;
@@ -51,38 +52,45 @@ public class MessageConverter {
     public static final String MSGMODEL_OBJ = "objectMessage";
     public static final byte[] EMPTY_BYTES = new byte[0];
 
-    public static byte[] getContentFromJms(javax.jms.Message jmsMessage) throws JMSException {
+    public static JmsContent getContentFromJms(javax.jms.Message jmsMessage) throws JMSException {
         if (jmsMessage == null) {
             return null;
         }
 
-        byte[] content;
+        JmsContent jmsContent = new JmsContent();
         if (jmsMessage instanceof TextMessage) {
-            if (StringUtils.isEmpty(((TextMessage) jmsMessage).getText())) {
+            if (StringUtils.isEmpty(((TextMessage)jmsMessage).getText())) {
                 throw new IllegalArgumentException("Message body length is zero");
             }
-            content = string2Bytes(((TextMessage) jmsMessage).getText(),
-                    Charsets.UTF_8.toString());
-        } else if (jmsMessage instanceof ObjectMessage) {
-            if (((ObjectMessage) jmsMessage).getObject() == null) {
+            jmsContent.setMessageModel(MSGMODEL_TEXT);
+            jmsContent.setContent(string2Bytes(((TextMessage)jmsMessage).getText(),
+                Charsets.UTF_8.toString()));
+        }
+        else if (jmsMessage instanceof ObjectMessage) {
+            if (((ObjectMessage)jmsMessage).getObject() == null) {
                 throw new IllegalArgumentException("Message body length is zero");
             }
             try {
-                content = objectSerialize(((ObjectMessage) jmsMessage).getObject());
-            } catch (IOException e) {
+                jmsContent.setMessageModel(MSGMODEL_OBJ);
+                jmsContent.setContent(objectSerialize(((ObjectMessage)jmsMessage).getObject()));
+            }
+            catch (IOException e) {
                 throw new JMSException(e.getMessage());
             }
-        } else if (jmsMessage instanceof BytesMessage) {
-            RocketMQBytesMessage bytesMessage = (RocketMQBytesMessage) jmsMessage;
+        }
+        else if (jmsMessage instanceof BytesMessage) {
+            RocketMQBytesMessage bytesMessage = (RocketMQBytesMessage)jmsMessage;
             if (bytesMessage.getBodyLength() == 0) {
                 throw new IllegalArgumentException("Message body length is zero");
             }
-            content = bytesMessage.getData();
-        } else {
+            jmsContent.setMessageModel(MSGMODEL_BYTES);
+            jmsContent.setContent(bytesMessage.getData());
+        }
+        else {
             throw new IllegalArgumentException("Unknown message type " + jmsMessage.getJMSType());
         }
 
-        return content;
+        return jmsContent;
     }
 
     public static RocketMQMessage convert2JMSMessage(MessageExt msg) throws JMSException {
@@ -92,20 +100,24 @@ public class MessageConverter {
 
         RocketMQMessage message;
         if (MSGMODEL_BYTES.equals(
-                msg.getUserProperty(JMS_MSGMODEL))) {
+            msg.getUserProperty(JMS_MSGMODEL))) {
             message = new RocketMQBytesMessage(msg.getBody());
-        } else if (MSGMODEL_OBJ.equals(
-                msg.getUserProperty(JMS_MSGMODEL))) {
+        }
+        else if (MSGMODEL_OBJ.equals(
+            msg.getUserProperty(JMS_MSGMODEL))) {
             try {
                 message = new RocketMQObjectMessage(objectDeserialize(msg.getBody()));
-            } catch (Exception e) {
+            }
+            catch (Exception e) {
                 throw new JMSException(e.getMessage());
             }
-        } else if (MSGMODEL_TEXT.equals(
-                msg.getUserProperty(JMS_MSGMODEL))) {
+        }
+        else if (MSGMODEL_TEXT.equals(
+            msg.getUserProperty(JMS_MSGMODEL))) {
             message = new RocketMQTextMessage(bytes2String(msg.getBody(),
-                    Charsets.UTF_8.toString()));
-        } else {
+                Charsets.UTF_8.toString()));
+        }
+        else {
             // rocketmq producer sends bytesMessage without setting JMS_MSGMODEL.
             message = new RocketMQBytesMessage(msg.getBody());
         }
@@ -117,7 +129,8 @@ public class MessageConverter {
 
         if (msg.getReconsumeTimes() > 0) {
             message.setHeader(Constant.JMS_REDELIVERED, Boolean.TRUE);
-        } else {
+        }
+        else {
             message.setHeader(Constant.JMS_REDELIVERED, Boolean.FALSE);
         }
 
@@ -129,22 +142,27 @@ public class MessageConverter {
                     String destinationStr = properValue;
                     if (null != destinationStr) {
                         message.setHeader(Constant.JMS_DESTINATION,
-                                destinationStr);
+                            destinationStr);
                     }
-                } else if (Constant.JMS_DELIVERY_MODE.equals(properName) ||
-                        Constant.JMS_PRIORITY.equals(properName)) {
+                }
+                else if (Constant.JMS_DELIVERY_MODE.equals(properName) ||
+                    Constant.JMS_PRIORITY.equals(properName)) {
                     message.setHeader(properName, properValue);
-                } else if (Constant.JMS_TIMESTAMP.equals(properName) ||
-                        Constant.JMS_EXPIRATION.equals(properName)) {
+                }
+                else if (Constant.JMS_TIMESTAMP.equals(properName) ||
+                    Constant.JMS_EXPIRATION.equals(properName)) {
                     message.setHeader(properName, properValue);
-                } else if (Constant.JMS_CORRELATION_ID.equals(properName) ||
-                        Constant.JMS_TYPE.equals(properName)) {
+                }
+                else if (Constant.JMS_CORRELATION_ID.equals(properName) ||
+                    Constant.JMS_TYPE.equals(properName)) {
                     message.setHeader(properName, properValue);
-                } else if (Constant.JMS_MESSAGE_ID.equals(properName) ||
-                        Constant.JMS_REDELIVERED.equals(properName)) {
+                }
+                else if (Constant.JMS_MESSAGE_ID.equals(properName) ||
+                    Constant.JMS_REDELIVERED.equals(properName)) {
                     //JMS_MESSAGE_ID should set by msg.getMsgID()
                     continue;
-                } else {
+                }
+                else {
                     properties.put(properName, properValue);
                 }
             }
@@ -171,7 +189,7 @@ public class MessageConverter {
         ObjectInputStream ois = new ObjectInputStream(bais);
         ois.close();
         bais.close();
-        return (Serializable) ois.readObject();
+        return (Serializable)ois.readObject();
     }
 
     public static final byte[] string2Bytes(String s, String charset) {
@@ -181,7 +199,8 @@ public class MessageConverter {
         byte[] bs = null;
         try {
             bs = s.getBytes(charset);
-        } catch (Exception e) {
+        }
+        catch (Exception e) {
             // ignore
         }
         return bs;
@@ -194,7 +213,8 @@ public class MessageConverter {
         String s = null;
         try {
             s = new String(bs, charset);
-        } catch (Exception e) {
+        }
+        catch (Exception e) {
             // ignore
         }
         return s;

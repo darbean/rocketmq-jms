@@ -31,19 +31,28 @@ import javax.jms.TextMessage;
 import javax.jms.Topic;
 import org.apache.rocketmq.jms.RocketMQConnectionFactory;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.context.ContextConfiguration;
+import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.Is.is;
 import static org.hamcrest.core.IsNull.notNullValue;
 
-public class JmsClientTest extends IntegrationBaseTest {
+@RunWith(SpringJUnit4ClassRunner.class)
+@ContextConfiguration(classes = AppConfig.class)
+public class ConsumeNormallyTest {
+
+    @Autowired
+    private RocketMQAdmin rocketMQAdmin;
 
     @Test
     public void testConsumeSynchronous() throws Exception {
         final String rmqTopicName = "coffee-syn" + UUID.randomUUID().toString();
-        server.createTopic(rmqTopicName);
+        rocketMQAdmin.createTopic(rmqTopicName);
 
-        ConnectionFactory factory = new RocketMQConnectionFactory(server.getNameServer(), clientId);
+        ConnectionFactory factory = new RocketMQConnectionFactory(Constant.NAME_SERVER_ADDRESS, Constant.CLIENT_ID);
         Connection connection = factory.createConnection();
         Session session = connection.createSession();
         connection.start();
@@ -66,7 +75,7 @@ public class JmsClientTest extends IntegrationBaseTest {
         }
         finally {
             connection.close();
-            server.deleteTopic(rmqTopicName);
+            rocketMQAdmin.deleteTopic(rmqTopicName);
         }
 
     }
@@ -74,9 +83,9 @@ public class JmsClientTest extends IntegrationBaseTest {
     @Test
     public void testConsumeAsynchronous() throws Exception {
         final String rmqTopicName = "coffee-async" + UUID.randomUUID().toString();
-        server.createTopic(rmqTopicName);
+        rocketMQAdmin.createTopic(rmqTopicName);
 
-        ConnectionFactory factory = new RocketMQConnectionFactory(server.getNameServer(), clientId);
+        ConnectionFactory factory = new RocketMQConnectionFactory(Constant.NAME_SERVER_ADDRESS, Constant.CLIENT_ID);
         Connection connection = factory.createConnection();
         Session session = connection.createSession();
         connection.start();
@@ -105,7 +114,7 @@ public class JmsClientTest extends IntegrationBaseTest {
         }
         finally {
             connection.close();
-            server.deleteTopic(rmqTopicName);
+            rocketMQAdmin.deleteTopic(rmqTopicName);
         }
 
     }
