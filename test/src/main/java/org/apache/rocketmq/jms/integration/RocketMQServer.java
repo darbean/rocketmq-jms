@@ -30,7 +30,6 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
-import org.junit.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -43,10 +42,10 @@ import static org.apache.rocketmq.jms.integration.Constant.NAME_SERVER_ADDRESS;
 @Service
 public class RocketMQServer {
     public static Logger log = LoggerFactory.getLogger(RocketMQServer.class);
-    private static final SimpleDateFormat sf = new SimpleDateFormat("yyyyMMddHHmmss");
-    private static final String rootDir = System.getProperty("user.home") + separator + "rocketmq-jms" + separator;
+    private final SimpleDateFormat sf = new SimpleDateFormat("yyyyMMddHHmmss");
+    private final String rootDir = System.getProperty("user.home") + separator + "rocketmq-jms" + separator;
     // fixed location of config files which is updated after RMQ3.2.6
-    private static final String configDir = System.getProperty("user.home") + separator + "store/config";
+    private final String configDir = System.getProperty("user.home") + separator + "store/config";
 
     private String serverDir;
     private volatile boolean started = false;
@@ -57,7 +56,7 @@ public class RocketMQServer {
     private NamesrvController namesrvController;
 
     //broker
-    private final String BROKER_NAME = "JmsTestBrokerName";
+    private final String brokerName = "JmsTestBrokerName";
     private BrokerController brokerController;
     private BrokerConfig brokerConfig = new BrokerConfig();
     private NettyServerConfig nettyServerConfig = new NettyServerConfig();
@@ -102,7 +101,7 @@ public class RocketMQServer {
         nameServerNettyServerConfig.setListenPort(Constant.NAME_SERVER_PORT);
         namesrvController = new NamesrvController(namesrvConfig, nameServerNettyServerConfig);
         try {
-            Assert.assertTrue(namesrvController.initialize());
+            namesrvController.initialize();
             log.info("Success to start Name Server:{}", NAME_SERVER_ADDRESS);
             namesrvController.start();
         }
@@ -114,7 +113,7 @@ public class RocketMQServer {
     }
 
     private void startBroker() {
-        brokerConfig.setBrokerName(BROKER_NAME);
+        brokerConfig.setBrokerName(brokerName);
         brokerConfig.setBrokerIP1(Constant.BROKER_IP);
         brokerConfig.setNamesrvAddr(NAME_SERVER_ADDRESS);
         storeConfig.setStorePathRootDir(serverDir);
@@ -124,7 +123,7 @@ public class RocketMQServer {
         brokerController = new BrokerController(brokerConfig, nettyServerConfig, nettyClientConfig, storeConfig);
 
         try {
-            Assert.assertTrue(brokerController.initialize());
+            brokerController.initialize();
             log.info("Broker Start name:{} address:{}", brokerConfig.getBrokerName(), brokerController.getBrokerAddr());
             brokerController.start();
 

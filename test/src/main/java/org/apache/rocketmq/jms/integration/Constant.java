@@ -31,7 +31,7 @@ public class Constant {
 
     public static final String BROKER_ADDRESS = BROKER_IP + ":" + BROKER_PORT;
 
-    public static final int BROKER_HA_PORT=9043;
+    public static final int BROKER_HA_PORT = 9043;
 
     public static final String CLIENT_ID = "coffee";
 }

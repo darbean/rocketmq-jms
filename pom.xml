@@ -83,18 +83,6 @@
                 <version>1.3</version>
                 <scope>test</scope>
             </dependency>
-            <dependency>
-                <groupId>com.alibaba.rocketmq</groupId>
-                <artifactId>rocketmq-namesrv</artifactId>
-                <version>3.5.8</version>
-                <scope>test</scope>
-            </dependency>
-            <dependency>
-                <groupId>com.alibaba.rocketmq</groupId>
-                <artifactId>rocketmq-broker</artifactId>
-                <version>3.5.8</version>
-                <scope>test</scope>
-            </dependency>
         </dependencies>
     </dependencyManagement>
 

@@ -59,27 +59,27 @@ public class MessageConverter {
 
         JmsContent jmsContent = new JmsContent();
         if (jmsMessage instanceof TextMessage) {
-            if (StringUtils.isEmpty(((TextMessage)jmsMessage).getText())) {
+            if (StringUtils.isEmpty(((TextMessage) jmsMessage).getText())) {
                 throw new IllegalArgumentException("Message body length is zero");
             }
             jmsContent.setMessageModel(MSGMODEL_TEXT);
-            jmsContent.setContent(string2Bytes(((TextMessage)jmsMessage).getText(),
+            jmsContent.setContent(string2Bytes(((TextMessage) jmsMessage).getText(),
                 Charsets.UTF_8.toString()));
         }
         else if (jmsMessage instanceof ObjectMessage) {
-            if (((ObjectMessage)jmsMessage).getObject() == null) {
+            if (((ObjectMessage) jmsMessage).getObject() == null) {
                 throw new IllegalArgumentException("Message body length is zero");
             }
             try {
                 jmsContent.setMessageModel(MSGMODEL_OBJ);
-                jmsContent.setContent(objectSerialize(((ObjectMessage)jmsMessage).getObject()));
+                jmsContent.setContent(objectSerialize(((ObjectMessage) jmsMessage).getObject()));
             }
             catch (IOException e) {
                 throw new JMSException(e.getMessage());
             }
         }
         else if (jmsMessage instanceof BytesMessage) {
-            RocketMQBytesMessage bytesMessage = (RocketMQBytesMessage)jmsMessage;
+            RocketMQBytesMessage bytesMessage = (RocketMQBytesMessage) jmsMessage;
             if (bytesMessage.getBodyLength() == 0) {
                 throw new IllegalArgumentException("Message body length is zero");
             }
@@ -189,7 +189,7 @@ public class MessageConverter {
         ObjectInputStream ois = new ObjectInputStream(bais);
         ois.close();
         bais.close();
-        return (Serializable)ois.readObject();
+        return (Serializable) ois.readObject();
     }
 
     public static final byte[] string2Bytes(String s, String charset) {
